@@ -2,35 +2,26 @@
 pragma solidity ^0.8.24;
 
 import {IsolatedRwaVault} from "./IsolatedRwaVault.sol";
+import {IERC20Minimal} from "./interfaces/IERC20Minimal.sol";
+import {Ownable2Step} from "./utils/Ownable2Step.sol";
 
 /// @notice Registry/factory for isolated Maddeth RWA credit vaults.
-contract RwaVaultFactory {
-    address public owner;
+contract RwaVaultFactory is Ownable2Step {
+    uint256 public constant MAX_VAULT_MATURITY = 5 * 365 days;
+    uint256 public constant MAX_METADATA_URI_BYTES = 512;
+
     address[] public vaults;
+    bool public creationPaused;
     mapping(address => bool) public approvedIssuer;
     mapping(address => string) public metadataURI;
     mapping(address => address) public vaultIssuer;
     mapping(address => bool) public isVault;
 
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event IssuerApproved(address indexed issuer, bool approved);
+    event VaultCreationPaused(bool paused);
     event VaultCreated(address indexed vault, address indexed liquidityAsset, address indexed borrower, string metadataURI);
 
-    modifier onlyOwner() {
-        require(msg.sender == owner, "NOT_OWNER");
-        _;
-    }
-
-    constructor() {
-        owner = msg.sender;
-        emit OwnershipTransferred(address(0), msg.sender);
-    }
-
-    function transferOwnership(address newOwner) external onlyOwner {
-        require(newOwner != address(0), "ZERO_OWNER");
-        emit OwnershipTransferred(owner, newOwner);
-        owner = newOwner;
-    }
+    constructor() Ownable2Step(msg.sender) {}
 
     function setIssuer(address issuer, bool approved) external onlyOwner {
         require(issuer != address(0), "ZERO_ISSUER");
@@ -38,13 +29,23 @@ contract RwaVaultFactory {
         emit IssuerApproved(issuer, approved);
     }
 
+    function setCreationPaused(bool paused) external onlyOwner {
+        creationPaused = paused;
+        emit VaultCreationPaused(paused);
+    }
+
     function createVault(address liquidityAsset, uint256 maturity, uint256 debtCap, string calldata uri)
         external
         returns (address vault)
     {
+        require(!creationPaused, "CREATION_PAUSED");
         require(approvedIssuer[msg.sender], "ISSUER_NOT_APPROVED");
-        require(liquidityAsset != address(0), "ZERO_ASSET");
-        require(bytes(uri).length > 0, "EMPTY_METADATA");
+        require(liquidityAsset != address(0) && liquidityAsset.code.length > 0, "BAD_ASSET");
+        require(IERC20Minimal(liquidityAsset).decimals() <= 36, "BAD_ASSET_DECIMALS");
+        require(maturity > block.timestamp && maturity <= block.timestamp + MAX_VAULT_MATURITY, "BAD_MATURITY");
+        require(debtCap > 0, "ZERO_DEBT_CAP");
+        uint256 uriLength = bytes(uri).length;
+        require(uriLength > 0 && uriLength <= MAX_METADATA_URI_BYTES, "BAD_METADATA");
 
         IsolatedRwaVault v = new IsolatedRwaVault(liquidityAsset, msg.sender, msg.sender, maturity, debtCap);
         vault = address(v);
