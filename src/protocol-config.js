@@ -9,7 +9,7 @@ export const KUB_TESTNET = Object.freeze({
 
 // Canonical deployment registry consumed by the static frontend.
 // Protocol addresses intentionally remain null until a real KUB Testnet broadcast succeeds.
-export const MADD_ETH_DEPLOYMENT = Object.freeze({
+export const MADDETH_DEPLOYMENT = Object.freeze({
   network: 'KUB Testnet',
   chainId: 25925,
   contracts: Object.freeze({
@@ -33,7 +33,7 @@ export const MADD_ETH_DEPLOYMENT = Object.freeze({
 });
 
 export function configuredContract(name) {
-  const value = MADD_ETH_DEPLOYMENT.contracts[name];
+  const value = MADDETH_DEPLOYMENT.contracts[name];
   return typeof value === 'string' && /^0x[0-9a-fA-F]{40}$/.test(value) ? value : null;
 }
 
