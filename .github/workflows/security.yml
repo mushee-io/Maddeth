@@ -1,0 +1,50 @@
+name: Security Analysis
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "contracts/**"
+      - "test/**"
+      - "foundry.toml"
+      - ".github/workflows/security.yml"
+  pull_request:
+    paths:
+      - "contracts/**"
+      - "test/**"
+      - "foundry.toml"
+      - ".github/workflows/security.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  slither:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Slither
+        run: pip install "slither-analyzer==0.11.3"
+
+      - name: Build
+        run: forge build
+
+      - name: Run high-severity static analysis
+        run: |
+          slither . \
+            --filter-paths "test|script|contracts/mocks" \
+            --exclude naming-convention,solc-version,similar-names \
+            --fail-high
