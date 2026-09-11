@@ -2,15 +2,15 @@
 pragma solidity ^0.8.24;
 
 import {IERC20Minimal} from "./interfaces/IERC20Minimal.sol";
+import {Ownable2Step} from "./utils/Ownable2Step.sol";
 
 /// @title IsolatedRwaVault
 /// @notice One vault = one isolated real-world credit risk domain.
 /// @dev Testnet architecture. Legal enforcement, servicing and recovery remain off-chain responsibilities.
-contract IsolatedRwaVault {
+contract IsolatedRwaVault is Ownable2Step {
     uint256 private constant BPS = 10_000;
     uint256 private constant YEAR = 365 days;
 
-    address public owner;
     address public immutable borrower;
     IERC20Minimal public immutable liquidityAsset;
     uint256 public immutable maturity;
@@ -39,12 +39,6 @@ contract IsolatedRwaVault {
     event PauseUpdated(bool paused);
     event DefaultDeclared(uint256 indexed timestamp, uint256 debtOutstanding);
     event DefaultCured(uint256 indexed timestamp);
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
-
-    modifier onlyOwner() {
-        require(msg.sender == owner, "NOT_OWNER");
-        _;
-    }
 
     modifier onlyBorrower() {
         require(msg.sender == borrower, "NOT_BORROWER");
@@ -58,23 +52,18 @@ contract IsolatedRwaVault {
         entered = false;
     }
 
-    constructor(address asset, address _owner, address _borrower, uint256 _maturity, uint256 _debtCap) {
-        require(asset != address(0) && _owner != address(0) && _borrower != address(0), "ZERO_ADDRESS");
+    constructor(address asset, address _owner, address _borrower, uint256 _maturity, uint256 _debtCap)
+        Ownable2Step(_owner)
+    {
+        require(asset != address(0) && asset.code.length > 0 && _borrower != address(0), "BAD_ADDRESS");
+        require(IERC20Minimal(asset).decimals() <= 36, "BAD_ASSET_DECIMALS");
         require(_maturity > block.timestamp, "BAD_MATURITY");
         require(_debtCap > 0, "ZERO_DEBT_CAP");
-        owner = _owner;
         borrower = _borrower;
         liquidityAsset = IERC20Minimal(asset);
         maturity = _maturity;
         debtCap = _debtCap;
         storedLastAccrual = block.timestamp;
-        emit OwnershipTransferred(address(0), _owner);
-    }
-
-    function transferOwnership(address newOwner) external onlyOwner {
-        require(newOwner != address(0), "ZERO_OWNER");
-        emit OwnershipTransferred(owner, newOwner);
-        owner = newOwner;
     }
 
     /// @notice Sets a fixed annual borrower APR for this isolated vault.
@@ -152,7 +141,7 @@ contract IsolatedRwaVault {
         uint256 shares = totalShares == 0 ? amount : amount * totalShares / assetsBefore;
         require(shares > 0, "ZERO_SHARES");
 
-        _safeTransferFrom(address(liquidityAsset), msg.sender, address(this), amount);
+        _safeTransferFromExact(msg.sender, amount);
         lenderShares[msg.sender] += shares;
         totalShares += shares;
         emit Deposited(msg.sender, amount, shares);
@@ -167,7 +156,7 @@ contract IsolatedRwaVault {
 
         principalOutstanding += amount;
         storedDebt += amount;
-        _safeTransfer(address(liquidityAsset), borrower, amount);
+        _safeTransferExact(borrower, amount);
         emit Borrowed(borrower, amount);
     }
 
@@ -177,7 +166,7 @@ contract IsolatedRwaVault {
         require(storedDebt > 0, "NO_DEBT");
         paid = amount > storedDebt ? storedDebt : amount;
 
-        _safeTransferFrom(address(liquidityAsset), msg.sender, address(this), paid);
+        _safeTransferFromExact(msg.sender, paid);
         uint256 interestDue = storedDebt > principalOutstanding ? storedDebt - principalOutstanding : 0;
         uint256 principalReduction = paid > interestDue ? paid - interestDue : 0;
         if (principalReduction > principalOutstanding) principalReduction = principalOutstanding;
@@ -199,13 +188,14 @@ contract IsolatedRwaVault {
         require(totalShares > 0, "NO_SHARES");
 
         uint256 assetsBefore = liquidityAsset.balanceOf(address(this));
+        require(assetsBefore > 0, "NO_LIQUIDITY");
         uint256 shares = _divUp(amount * totalShares, assetsBefore);
         require(lenderShares[msg.sender] >= shares, "BAD_AMOUNT");
         require(assetsBefore >= amount, "NO_LIQUIDITY");
 
         lenderShares[msg.sender] -= shares;
         totalShares -= shares;
-        _safeTransfer(address(liquidityAsset), msg.sender, amount);
+        _safeTransferExact(msg.sender, amount);
         emit Withdrawn(msg.sender, amount, shares);
     }
 
@@ -251,5 +241,24 @@ contract IsolatedRwaVault {
     function _safeTransferFrom(address token, address from, address to, uint256 amount) internal {
         (bool ok, bytes memory data) = token.call(abi.encodeWithSelector(IERC20Minimal.transferFrom.selector, from, to, amount));
         require(ok && (data.length == 0 || abi.decode(data, (bool))), "TOKEN_TRANSFER_FROM_FAILED");
+    }
+
+    function _safeTransferFromExact(address from, uint256 amount) internal {
+        address token = address(liquidityAsset);
+        uint256 beforeBalance = liquidityAsset.balanceOf(address(this));
+        _safeTransferFrom(token, from, address(this), amount);
+        uint256 afterBalance = liquidityAsset.balanceOf(address(this));
+        require(afterBalance >= beforeBalance && afterBalance - beforeBalance == amount, "UNSUPPORTED_TOKEN_BEHAVIOR");
+    }
+
+    function _safeTransferExact(address to, uint256 amount) internal {
+        address token = address(liquidityAsset);
+        uint256 vaultBefore = liquidityAsset.balanceOf(address(this));
+        uint256 recipientBefore = liquidityAsset.balanceOf(to);
+        _safeTransfer(token, to, amount);
+        uint256 vaultAfter = liquidityAsset.balanceOf(address(this));
+        uint256 recipientAfter = liquidityAsset.balanceOf(to);
+        require(vaultBefore >= vaultAfter && vaultBefore - vaultAfter == amount, "UNSUPPORTED_TOKEN_BEHAVIOR");
+        require(recipientAfter >= recipientBefore && recipientAfter - recipientBefore == amount, "UNSUPPORTED_TOKEN_BEHAVIOR");
     }
 }
