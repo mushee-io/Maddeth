@@ -76,7 +76,11 @@ jobs:
           node --input-type=module --check < src/protocol-config.js
           node --input-type=module --check < src/protocol.js
           node --input-type=module --check < src/app.js
+          node --input-type=module --check < src/ui.js
           node --check scripts/apply-deployment.mjs
+          node --check scripts/check-frontend.mjs
+          node scripts/check-frontend.mjs
+          git diff --check
           forge build
           forge test -vvv
 
@@ -132,6 +136,7 @@ jobs:
           set -euo pipefail
           node scripts/apply-deployment.mjs deployment-kub-testnet.json
           node --input-type=module --check < src/protocol-config.js
+          node scripts/check-frontend.mjs
           git diff --check
 
       - name: Commit canonical KUB Testnet registry
