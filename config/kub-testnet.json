@@ -5,12 +5,15 @@
   "rpcUrl": "https://rpc-testnet.bitkubchain.io",
   "nativeCurrency": "tKUB",
   "explorer": "https://testnet.kubscan.com",
+  "faucet": "https://faucet.kubchain.com/",
   "deploymentStatus": "not-deployed",
   "contracts": {
     "maddethPool": null,
+    "maddethLens": null,
     "oracle": null,
     "interestRateModel": null,
     "rwaVaultFactory": null,
+    "sampleRwaVault": null,
     "wrappedKUB": null,
     "testUSDT": null,
     "testUSDC": null
@@ -19,9 +22,15 @@
     "KUB_USDT": "0x6Cc1316A9695E435875A5CDA6e60066114f8A395",
     "USDC_USDT": "0x6f1373EC8d0562be98a98FE46844f057284B7A61"
   },
+  "initialTestnetLiquidity": {
+    "mUSDC": "1000000",
+    "mUSDT": "1000000"
+  },
   "notes": [
-    "Protocol contract addresses must remain null until a real KUB Testnet broadcast succeeds.",
-    "testUSDC and testUSDT are mintable Maddeth test assets and are not real stablecoins.",
-    "Oracle consumer authorization may be required by Bitkub Oracle after deployment."
+    "Protocol contract addresses must remain null until a real KUB Testnet broadcast succeeds and the receipts are checked on KUBScan.",
+    "WtKUB, mUSDC and mUSDT are Maddeth test assets. mUSDC and mUSDT are not real stablecoins.",
+    "The deployment seeds test mUSDC/mUSDT liquidity so borrowing works immediately after broadcast.",
+    "The sample RWA vault is an explicitly labelled testnet demonstration and does not represent a real-world issuer or enforceable asset.",
+    "Re-confirm oracle feed addresses and any consumer authorization requirements in the KUB Developer Center immediately before broadcast."
   ]
 }
