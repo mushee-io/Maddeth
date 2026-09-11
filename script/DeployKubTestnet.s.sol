@@ -14,6 +14,16 @@ interface VmDeploy {
     function addr(uint256 privateKey) external returns (address keyAddr);
     function startBroadcast(uint256 privateKey) external;
     function stopBroadcast() external;
+    function serializeAddress(string calldata objectKey, string calldata valueKey, address value)
+        external
+        returns (string memory json);
+    function serializeUint(string calldata objectKey, string calldata valueKey, uint256 value)
+        external
+        returns (string memory json);
+    function serializeString(string calldata objectKey, string calldata valueKey, string calldata value)
+        external
+        returns (string memory json);
+    function writeJson(string calldata json, string calldata path) external;
 }
 
 /// @notice Complete testnet deployment for KUB Chain testnet (chain id 25925).
@@ -129,6 +139,19 @@ contract DeployKubTestnet {
 
         VM.stopBroadcast();
 
+        _writeManifest(
+            deployer,
+            address(pool),
+            address(lens),
+            address(oracle),
+            address(rateModel),
+            address(wrappedKub),
+            address(mockUsdc),
+            address(mockUsdt),
+            address(rwaFactory),
+            sampleRwaVault
+        );
+
         return (
             address(pool),
             address(lens),
@@ -140,5 +163,35 @@ contract DeployKubTestnet {
             address(rwaFactory),
             sampleRwaVault
         );
+    }
+
+    function _writeManifest(
+        address deployer,
+        address pool,
+        address lens,
+        address oracle,
+        address rateModel,
+        address wrappedKub,
+        address mockUsdc,
+        address mockUsdt,
+        address rwaFactory,
+        address sampleRwaVault
+    ) internal {
+        string memory key = "deployment";
+        VM.serializeString(key, "network", "KUB Testnet");
+        VM.serializeUint(key, "chainId", 25925);
+        VM.serializeUint(key, "generatedAt", block.timestamp);
+        VM.serializeUint(key, "blockNumber", block.number);
+        VM.serializeAddress(key, "deployer", deployer);
+        VM.serializeAddress(key, "maddethPool", pool);
+        VM.serializeAddress(key, "maddethLens", lens);
+        VM.serializeAddress(key, "oracle", oracle);
+        VM.serializeAddress(key, "interestRateModel", rateModel);
+        VM.serializeAddress(key, "wrappedKUB", wrappedKub);
+        VM.serializeAddress(key, "testUSDC", mockUsdc);
+        VM.serializeAddress(key, "testUSDT", mockUsdt);
+        VM.serializeAddress(key, "rwaVaultFactory", rwaFactory);
+        string memory json = VM.serializeAddress(key, "sampleRwaVault", sampleRwaVault);
+        VM.writeJson(json, "./deployment-kub-testnet.json");
     }
 }
