@@ -4,19 +4,22 @@ export const KUB_TESTNET = Object.freeze({
   chainName: 'KUB Testnet',
   nativeCurrency: Object.freeze({ name: 'Test KUB', symbol: 'tKUB', decimals: 18 }),
   rpcUrls: Object.freeze(['https://rpc-testnet.bitkubchain.io']),
-  blockExplorerUrls: Object.freeze(['https://testnet.kubscan.com'])
+  blockExplorerUrls: Object.freeze(['https://testnet.kubscan.com']),
+  faucetUrl: 'https://faucet.kubchain.com/'
 });
 
 // Canonical deployment registry consumed by the static frontend.
-// Protocol addresses intentionally remain null until a real KUB Testnet broadcast succeeds.
+// Addresses MUST stay null until a real chain-25925 broadcast succeeds and is checked on KUBScan.
 export const MADDETH_DEPLOYMENT = Object.freeze({
   network: 'KUB Testnet',
   chainId: 25925,
   contracts: Object.freeze({
     maddethPool: null,
+    maddethLens: null,
     oracle: null,
     interestRateModel: null,
     rwaVaultFactory: null,
+    sampleRwaVault: null,
     wrappedKUB: null,
     testUSDT: null,
     testUSDC: null
@@ -26,9 +29,33 @@ export const MADDETH_DEPLOYMENT = Object.freeze({
     usdcUsdt: '0x6f1373EC8d0562be98a98FE46844f057284B7A61'
   }),
   assets: Object.freeze([
-    Object.freeze({ key: 'wrappedKUB', symbol: 'WtKUB', decimals: 18, testOnly: true }),
-    Object.freeze({ key: 'testUSDC', symbol: 'mUSDC', decimals: 6, testOnly: true }),
-    Object.freeze({ key: 'testUSDT', symbol: 'mUSDT', decimals: 6, testOnly: true })
+    Object.freeze({
+      key: 'wrappedKUB',
+      symbol: 'WtKUB',
+      name: 'Wrapped Test KUB',
+      decimals: 18,
+      testOnly: true,
+      canWrapNative: true,
+      collateral: true
+    }),
+    Object.freeze({
+      key: 'testUSDC',
+      symbol: 'mUSDC',
+      name: 'Maddeth Test USDC',
+      decimals: 6,
+      testOnly: true,
+      canWrapNative: false,
+      collateral: true
+    }),
+    Object.freeze({
+      key: 'testUSDT',
+      symbol: 'mUSDT',
+      name: 'Maddeth Test USDT',
+      decimals: 6,
+      testOnly: true,
+      canWrapNative: false,
+      collateral: true
+    })
   ])
 });
 
@@ -40,6 +67,7 @@ export function configuredContract(name) {
 export function deploymentReady() {
   return Boolean(
     configuredContract('maddethPool') &&
+    configuredContract('maddethLens') &&
     configuredContract('oracle') &&
     configuredContract('wrappedKUB') &&
     configuredContract('testUSDC') &&
