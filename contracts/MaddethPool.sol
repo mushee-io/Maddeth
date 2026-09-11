@@ -4,16 +4,20 @@ pragma solidity ^0.8.24;
 import {IERC20Minimal} from "./interfaces/IERC20Minimal.sol";
 import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
 import {IInterestRateModel} from "./interfaces/IInterestRateModel.sol";
+import {Ownable2Step} from "./utils/Ownable2Step.sol";
 
 /// @title MaddethPool
 /// @notice KUB-testnet pooled lending core with indexed interest accrual.
 /// @dev Testnet architecture. Audit and economic review required before mainnet use.
-contract MaddethPool {
+contract MaddethPool is Ownable2Step {
     uint256 private constant BPS = 10_000;
     uint256 private constant WAD = 1e18;
     uint256 private constant YEAR = 365 days;
     uint256 public constant MAX_ORACLE_AGE = 30 minutes;
     uint256 public constant CLOSE_FACTOR_BPS = 5_000;
+    uint256 public constant MAX_MARKETS = 32;
+    uint16 public constant MAX_LTV_BPS = 9_000;
+    uint16 public constant MAX_LIQUIDATION_THRESHOLD_BPS = 9_500;
 
     struct MarketConfig {
         bool listed;
@@ -36,7 +40,6 @@ contract MaddethPool {
         uint256 accruedReserves;
     }
 
-    address public owner;
     address public riskAdmin;
     IPriceOracle public oracle;
     bool public protocolPaused;
@@ -49,12 +52,11 @@ contract MaddethPool {
     mapping(address => mapping(address => uint256)) private borrowShares;
     mapping(address => mapping(address => bool)) public collateralEnabled;
 
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
-    event RiskAdminUpdated(address indexed newRiskAdmin);
-    event OracleUpdated(address indexed newOracle);
-    event ProtocolPaused(bool paused);
+    event RiskAdminUpdated(address indexed previousRiskAdmin, address indexed newRiskAdmin);
+    event OracleUpdated(address indexed previousOracle, address indexed newOracle);
+    event ProtocolPaused(bool paused, address indexed caller);
     event MarketConfigured(address indexed asset, uint16 ltvBps, uint16 liquidationThresholdBps, uint16 reserveFactorBps, uint128 supplyCap, uint128 borrowCap, address rateModel);
-    event MarketPaused(address indexed asset, bool paused);
+    event MarketPaused(address indexed asset, bool paused, address indexed caller);
     event InterestAccrued(address indexed asset, uint256 borrowIndex, uint256 supplyIndex, uint256 interestAccrued, uint256 reservesAccrued);
     event Supplied(address indexed user, address indexed asset, uint256 amount, uint256 shares);
     event Withdrawn(address indexed user, address indexed asset, uint256 amount, uint256 shares);
@@ -65,16 +67,6 @@ contract MaddethPool {
     event BadDebtAbsorbed(address indexed user, address indexed debtAsset, uint256 debtWrittenOff, uint256 reserveCover, uint256 supplierLoss);
     event ReservesWithdrawn(address indexed asset, address indexed to, uint256 amount);
 
-    modifier onlyOwner() {
-        require(msg.sender == owner, "NOT_OWNER");
-        _;
-    }
-
-    modifier onlyRisk() {
-        require(msg.sender == owner || msg.sender == riskAdmin, "NOT_RISK_ADMIN");
-        _;
-    }
-
     modifier nonReentrant() {
         require(!entered, "REENTRANCY");
         entered = true;
@@ -82,50 +74,54 @@ contract MaddethPool {
         entered = false;
     }
 
-    constructor(address _oracle) {
-        require(_oracle != address(0), "ZERO_ORACLE");
-        owner = msg.sender;
+    constructor(address _oracle) Ownable2Step(msg.sender) {
+        require(_oracle != address(0) && _oracle.code.length > 0, "BAD_ORACLE");
         riskAdmin = msg.sender;
         oracle = IPriceOracle(_oracle);
-        emit OwnershipTransferred(address(0), msg.sender);
-        emit RiskAdminUpdated(msg.sender);
-        emit OracleUpdated(_oracle);
-    }
-
-    function transferOwnership(address newOwner) external onlyOwner {
-        require(newOwner != address(0), "ZERO_OWNER");
-        emit OwnershipTransferred(owner, newOwner);
-        owner = newOwner;
+        emit RiskAdminUpdated(address(0), msg.sender);
+        emit OracleUpdated(address(0), _oracle);
     }
 
     function setRiskAdmin(address admin) external onlyOwner {
-        require(admin != address(0), "ZERO_ADMIN");
+        address previous = riskAdmin;
         riskAdmin = admin;
-        emit RiskAdminUpdated(admin);
+        emit RiskAdminUpdated(previous, admin);
     }
 
     function setOracle(address newOracle) external onlyOwner {
-        require(newOracle != address(0), "ZERO_ORACLE");
+        require(newOracle != address(0) && newOracle.code.length > 0, "BAD_ORACLE");
+        address previous = address(oracle);
         oracle = IPriceOracle(newOracle);
-        emit OracleUpdated(newOracle);
+        emit OracleUpdated(previous, newOracle);
     }
 
-    function setProtocolPaused(bool paused) external onlyRisk {
+    /// @notice Risk admin may pause immediately, but only the owner may unpause.
+    function setProtocolPaused(bool paused) external {
+        if (paused) {
+            require(msg.sender == owner || msg.sender == riskAdmin, "NOT_RISK_ADMIN");
+        } else {
+            require(msg.sender == owner, "OWNER_REQUIRED_TO_UNPAUSE");
+        }
         protocolPaused = paused;
-        emit ProtocolPaused(paused);
+        emit ProtocolPaused(paused, msg.sender);
     }
 
-    function configureMarket(address asset, MarketConfig calldata cfg) external onlyRisk {
-        require(asset != address(0), "ZERO_ASSET");
+    /// @notice Market parameter changes are owner-only; the risk admin is deliberately pause-only.
+    function configureMarket(address asset, MarketConfig calldata cfg) external onlyOwner {
+        require(asset != address(0) && asset.code.length > 0, "BAD_ASSET");
+        require(cfg.ltvBps <= MAX_LTV_BPS, "LTV_TOO_HIGH");
         require(cfg.ltvBps < cfg.liquidationThresholdBps, "LTV_GE_THRESHOLD");
-        require(cfg.liquidationThresholdBps < BPS, "BAD_THRESHOLD");
+        require(cfg.liquidationThresholdBps <= MAX_LIQUIDATION_THRESHOLD_BPS, "BAD_THRESHOLD");
         require(cfg.liquidationBonusBps <= 2_000, "BONUS_TOO_HIGH");
         require(cfg.reserveFactorBps <= 3_000, "RESERVE_TOO_HIGH");
-        require(cfg.rateModel != address(0), "ZERO_RATE_MODEL");
+        require(cfg.rateModel != address(0) && cfg.rateModel.code.length > 0, "BAD_RATE_MODEL");
+        require(IERC20Minimal(asset).decimals() <= 36, "BAD_ASSET_DECIMALS");
+        require(cfg.supplyCap == 0 || cfg.borrowCap == 0 || cfg.borrowCap <= cfg.supplyCap, "BORROW_CAP_GT_SUPPLY_CAP");
 
         if (markets[asset].listed) {
             _accrue(asset);
         } else {
+            require(listedAssets.length < MAX_MARKETS, "TOO_MANY_MARKETS");
             listedAssets.push(asset);
             MarketState storage s = marketStates[asset];
             s.supplyIndex = WAD;
@@ -138,10 +134,16 @@ contract MaddethPool {
         emit MarketConfigured(asset, cfg.ltvBps, cfg.liquidationThresholdBps, cfg.reserveFactorBps, cfg.supplyCap, cfg.borrowCap, cfg.rateModel);
     }
 
-    function setPaused(address asset, bool paused) external onlyRisk {
+    /// @notice Risk admin may pause a market; only the owner may reopen it.
+    function setPaused(address asset, bool paused) external {
         require(markets[asset].listed, "UNLISTED");
+        if (paused) {
+            require(msg.sender == owner || msg.sender == riskAdmin, "NOT_RISK_ADMIN");
+        } else {
+            require(msg.sender == owner, "OWNER_REQUIRED_TO_UNPAUSE");
+        }
         markets[asset].paused = paused;
-        emit MarketPaused(asset, paused);
+        emit MarketPaused(asset, paused, msg.sender);
     }
 
     function marketCount() external view returns (uint256) {
@@ -222,7 +224,7 @@ contract MaddethPool {
         uint256 totalSupply = s.totalSupplyShares * s.supplyIndex / WAD;
         require(m.supplyCap == 0 || totalSupply + amount <= m.supplyCap, "SUPPLY_CAP");
 
-        _safeTransferFrom(asset, msg.sender, address(this), amount);
+        _safeTransferFromExact(asset, msg.sender, amount);
         uint256 shares = amount * WAD / s.supplyIndex;
         require(shares > 0, "ZERO_SHARES");
         supplyShares[msg.sender][asset] += shares;
@@ -232,14 +234,16 @@ contract MaddethPool {
 
     function setCollateral(address asset, bool enabled) external {
         require(markets[asset].listed, "UNLISTED");
+        if (enabled) require(supplied(msg.sender, asset) > 0, "NO_SUPPLY");
         collateralEnabled[msg.sender][asset] = enabled;
         if (!enabled) require(_accountHealthy(msg.sender), "WOULD_UNDERCOLLATERALIZE");
         emit CollateralToggled(msg.sender, asset, enabled);
     }
 
+    /// @notice Withdrawals remain available while a market/protocol is paused, subject to account health and cash.
     function withdraw(address asset, uint256 amount) external nonReentrant {
         MarketConfig storage m = markets[asset];
-        require(m.listed && !m.paused, "MARKET_UNAVAILABLE");
+        require(m.listed, "UNLISTED");
         require(amount > 0, "ZERO_AMOUNT");
         _accrue(asset);
         MarketState storage s = marketStates[asset];
@@ -252,7 +256,7 @@ contract MaddethPool {
         s.totalSupplyShares -= shares;
         require(_accountHealthy(msg.sender), "WOULD_UNDERCOLLATERALIZE");
         require(IERC20Minimal(asset).balanceOf(address(this)) >= amount, "INSUFFICIENT_LIQUIDITY");
-        _safeTransfer(asset, msg.sender, amount);
+        _safeTransferExact(asset, msg.sender, amount);
         emit Withdrawn(msg.sender, asset, amount, shares);
     }
 
@@ -270,7 +274,7 @@ contract MaddethPool {
         borrowShares[msg.sender][asset] += shares;
         s.totalBorrowShares += shares;
         require(_withinBorrowLimit(msg.sender), "LTV_EXCEEDED");
-        _safeTransfer(asset, msg.sender, amount);
+        _safeTransferExact(asset, msg.sender, amount);
         emit Borrowed(msg.sender, asset, amount, shares);
     }
 
@@ -312,18 +316,18 @@ contract MaddethPool {
             colSharesToBurn = supplyShares[user][collateralAsset];
         }
 
-        _safeTransferFrom(debtAsset, msg.sender, address(this), paid);
+        _safeTransferFromExact(debtAsset, msg.sender, paid);
         borrowShares[user][debtAsset] -= debtSharesToBurn;
         debtS.totalBorrowShares -= debtSharesToBurn;
         supplyShares[user][collateralAsset] -= colSharesToBurn;
         colS.totalSupplyShares -= colSharesToBurn;
-        _safeTransfer(collateralAsset, msg.sender, seize);
+        _safeTransferExact(collateralAsset, msg.sender, seize);
         emit Liquidated(user, debtAsset, collateralAsset, paid, seize);
     }
 
     /// @notice Writes off unrecoverable debt only after all enabled collateral has been exhausted.
-    /// @dev Reserves absorb losses first. Any remainder is socialized to suppliers via the supply index.
-    function absorbBadDebt(address user, address debtAsset) external nonReentrant onlyRisk {
+    /// @dev Owner-only because this action can socialize losses to suppliers.
+    function absorbBadDebt(address user, address debtAsset) external nonReentrant onlyOwner {
         require(markets[debtAsset].listed, "UNLISTED");
         _accrue(debtAsset);
         require(!_accountHealthy(user), "ACCOUNT_HEALTHY");
@@ -362,7 +366,7 @@ contract MaddethPool {
         uint256 borrowedAssets = s.totalBorrowShares * s.borrowIndex / WAD;
         require(cash + borrowedAssets >= suppliedAssets + amount, "RESERVES_NOT_CASHED");
         s.accruedReserves -= amount;
-        _safeTransfer(asset, to, amount);
+        _safeTransferExact(asset, to, amount);
         emit ReservesWithdrawn(asset, to, amount);
     }
 
@@ -405,7 +409,7 @@ contract MaddethPool {
 
         uint256 sharesToBurn = paid == debt ? userShares : paid * WAD / s.borrowIndex;
         require(sharesToBurn > 0, "ZERO_SHARES");
-        _safeTransferFrom(asset, payer, address(this), paid);
+        _safeTransferFromExact(asset, payer, paid);
         borrowShares[user][asset] = userShares - sharesToBurn;
         s.totalBorrowShares -= sharesToBurn;
         emit Repaid(user, asset, paid, sharesToBurn);
@@ -513,5 +517,24 @@ contract MaddethPool {
     function _safeTransferFrom(address token, address from, address to, uint256 amount) internal {
         (bool ok, bytes memory data) = token.call(abi.encodeWithSelector(IERC20Minimal.transferFrom.selector, from, to, amount));
         require(ok && (data.length == 0 || abi.decode(data, (bool))), "TOKEN_TRANSFER_FROM_FAILED");
+    }
+
+    /// @dev Rejects fee-on-transfer/rebasing behavior that would desynchronize internal accounting.
+    function _safeTransferFromExact(address token, address from, uint256 amount) internal {
+        uint256 beforeBalance = IERC20Minimal(token).balanceOf(address(this));
+        _safeTransferFrom(token, from, address(this), amount);
+        uint256 afterBalance = IERC20Minimal(token).balanceOf(address(this));
+        require(afterBalance >= beforeBalance && afterBalance - beforeBalance == amount, "UNSUPPORTED_TOKEN_BEHAVIOR");
+    }
+
+    /// @dev Requires both the pool debit and recipient credit to equal the accounting amount exactly.
+    function _safeTransferExact(address token, address to, uint256 amount) internal {
+        uint256 poolBefore = IERC20Minimal(token).balanceOf(address(this));
+        uint256 recipientBefore = IERC20Minimal(token).balanceOf(to);
+        _safeTransfer(token, to, amount);
+        uint256 poolAfter = IERC20Minimal(token).balanceOf(address(this));
+        uint256 recipientAfter = IERC20Minimal(token).balanceOf(to);
+        require(poolBefore >= poolAfter && poolBefore - poolAfter == amount, "UNSUPPORTED_TOKEN_BEHAVIOR");
+        require(recipientAfter >= recipientBefore && recipientAfter - recipientBefore == amount, "UNSUPPORTED_TOKEN_BEHAVIOR");
     }
 }
