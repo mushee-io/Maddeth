@@ -1,13 +1,14 @@
-const KUB_TESTNET = {
-  chainIdHex: '0x6545',
-  chainId: 25925,
-  chainName: 'KUB Testnet',
-  nativeCurrency: { name: 'Test KUB', symbol: 'tKUB', decimals: 18 },
-  rpcUrls: ['https://rpc-testnet.bitkubchain.io'],
-  blockExplorerUrls: ['https://testnet.kubscan.com']
-};
+import {
+  KUB_TESTNET,
+  connectWallet as connectProtocolWallet,
+  ensureKubTestnet,
+  walletSnapshot,
+  liveProtocolSnapshot,
+  deploymentReady,
+  formatUnits
+} from './protocol.js';
 
-const state = { account: null, chainId: null, sandbox: false };
+const state = { account: null, chainId: null, sandbox: false, protocol: null };
 const views = ['markets','borrow','rwa','portfolio','protocol'];
 const titleMap = {markets:'Markets',borrow:'Borrow',rwa:'RWA Credit',portfolio:'Portfolio',protocol:'Protocol'};
 
@@ -27,40 +28,57 @@ document.querySelectorAll('[data-view]').forEach(el => el.addEventListener('clic
 }));
 
 function shortAddress(a){ return `${a.slice(0,6)}…${a.slice(-4)}`; }
-function hexToDecimal(hex){ return parseInt(hex,16); }
-function formatEth(hex){
-  const n = BigInt(hex || '0x0');
-  const whole = n / 10n**18n;
-  const frac = (n % 10n**18n).toString().padStart(18,'0').slice(0,4).replace(/0+$/,'');
-  return `${whole}${frac ? '.'+frac : ''}`;
-}
 
-async function ensureKubTestnet(){
-  if(!window.ethereum) throw new Error('No EVM wallet detected');
+async function syncProtocolStatus(){
+  if(!deploymentReady()){
+    state.protocol = { deployed:false, activeMarkets:0 };
+    $('contractStatus').textContent = 'Contracts not deployed/configured on KUB Testnet yet';
+    const activeMarkets = document.querySelector('.metrics-row .metric:nth-child(4) strong');
+    if(activeMarkets && !state.sandbox) activeMarkets.textContent = '0';
+    $('submitBorrow').disabled = true;
+    $('submitBorrow').textContent = 'Contracts not deployed';
+    return;
+  }
+
   try{
-    await window.ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:KUB_TESTNET.chainIdHex}]});
+    state.protocol = await liveProtocolSnapshot(state.account);
+    $('contractStatus').textContent = `Live contracts connected · ${state.protocol.activeMarkets} markets`;
+    const activeMarkets = document.querySelector('.metrics-row .metric:nth-child(4) strong');
+    if(activeMarkets && !state.sandbox) activeMarkets.textContent = String(state.protocol.activeMarkets);
+    $('submitBorrow').disabled = true;
+    $('submitBorrow').textContent = 'Transaction wiring in progress';
+
+    if(state.account && state.protocol.accountHealthFactor !== null){
+      const hf = state.protocol.accountHealthFactor;
+      const maxUint = (1n << 256n) - 1n;
+      $('healthFactor').textContent = hf === maxUint ? '∞' : formatUnits(hf, 18, 2);
+    }
   }catch(err){
-    if(err && err.code === 4902){
-      await window.ethereum.request({method:'wallet_addEthereumChain',params:[KUB_TESTNET]});
-    } else { throw err; }
+    console.error('Live protocol read failed', err);
+    $('contractStatus').textContent = 'Contract addresses configured, but live reads failed closed';
   }
 }
 
 async function refreshWallet(){
   if(!window.ethereum || !state.account) return;
-  const chainHex = await window.ethereum.request({method:'eth_chainId'});
-  state.chainId = hexToDecimal(chainHex);
-  $('networkPill').textContent = state.chainId === KUB_TESTNET.chainId ? 'KUB Testnet' : `Wrong network · ${state.chainId}`;
-  $('networkPill').style.borderColor = state.chainId === KUB_TESTNET.chainId ? '#36b89f' : '#ff8a76';
-  $('connectWallet').textContent = shortAddress(state.account);
-  $('portfolioTitle').textContent = `Portfolio · ${shortAddress(state.account)}`;
-  $('portfolioConnect').textContent = 'Wallet connected';
-  $('portfolioConnect').disabled = true;
-  if(state.chainId === KUB_TESTNET.chainId){
-    const balance = await window.ethereum.request({method:'eth_getBalance',params:[state.account,'latest']});
-    $('walletBalance').textContent = `${formatEth(balance)} tKUB`;
-  }else{
-    $('walletBalance').textContent = 'Switch to KUB Testnet';
+  try{
+    const snapshot = await walletSnapshot(state.account);
+    state.chainId = snapshot.chainId;
+    $('networkPill').textContent = state.chainId === KUB_TESTNET.chainId ? 'KUB Testnet' : `Wrong network · ${state.chainId}`;
+    $('networkPill').style.borderColor = state.chainId === KUB_TESTNET.chainId ? '#36b89f' : '#ff8a76';
+    $('connectWallet').textContent = shortAddress(state.account);
+    $('portfolioTitle').textContent = `Portfolio · ${shortAddress(state.account)}`;
+    $('portfolioConnect').textContent = 'Wallet connected';
+    $('portfolioConnect').disabled = true;
+
+    if(state.chainId === KUB_TESTNET.chainId && snapshot.nativeBalance !== null){
+      $('walletBalance').textContent = `${formatUnits(snapshot.nativeBalance, 18, 4)} tKUB`;
+      await syncProtocolStatus();
+    }else{
+      $('walletBalance').textContent = 'Switch to KUB Testnet';
+    }
+  }catch(err){
+    console.error('Wallet refresh failed', err);
   }
 }
 
@@ -70,9 +88,7 @@ async function connectWallet(){
     return;
   }
   try{
-    const accounts = await window.ethereum.request({method:'eth_requestAccounts'});
-    state.account = accounts[0];
-    await ensureKubTestnet();
+    state.account = await connectProtocolWallet();
     await refreshWallet();
   }catch(err){
     console.error(err);
@@ -82,11 +98,26 @@ async function connectWallet(){
 
 $('connectWallet').addEventListener('click', connectWallet);
 $('portfolioConnect').addEventListener('click', connectWallet);
+$('networkPill').addEventListener('click', async () => {
+  if(!window.ethereum) return;
+  try{
+    await ensureKubTestnet();
+    await refreshWallet();
+  }catch(err){
+    console.error(err);
+  }
+});
 
 if(window.ethereum){
-  window.ethereum.on?.('accountsChanged', accounts => { state.account = accounts[0] || null; if(state.account) refreshWallet(); });
+  window.ethereum.on?.('accountsChanged', accounts => {
+    state.account = accounts[0] || null;
+    if(state.account) refreshWallet();
+    else window.location.reload();
+  });
   window.ethereum.on?.('chainChanged', () => { if(state.account) refreshWallet(); });
-  window.ethereum.request({method:'eth_accounts'}).then(accounts => { if(accounts[0]){state.account=accounts[0];refreshWallet();} });
+  window.ethereum.request({method:'eth_accounts'}).then(accounts => {
+    if(accounts[0]){state.account=accounts[0];refreshWallet();}
+  });
 }
 
 function setMode(sandbox){
@@ -98,10 +129,17 @@ function setMode(sandbox){
   document.querySelectorAll('[data-live]').forEach(el => {
     el.textContent = sandbox ? el.dataset.sandbox : el.dataset.live;
   });
+  if(!sandbox && state.protocol?.deployed){
+    const activeMarkets = document.querySelector('.metrics-row .metric:nth-child(4) strong');
+    if(activeMarkets) activeMarkets.textContent = String(state.protocol.activeMarkets);
+  }
   updateRisk();
 }
 $('sandboxMode').addEventListener('click',()=>setMode(true));
-$('liveMode').addEventListener('click',()=>setMode(false));
+$('liveMode').addEventListener('click',async()=>{
+  setMode(false);
+  await syncProtocolStatus();
+});
 
 function numberFromInput(id){
   const v = Number($(id).value.replace(/,/g,''));
@@ -112,7 +150,7 @@ function updateRisk(){
   const borrow = numberFromInput('borrowAmount');
   if(!state.sandbox || !supply || !borrow){
     $('ltvValue').textContent = '0.00%';
-    $('healthFactor').textContent = '∞';
+    if(!state.account || !state.protocol?.deployed) $('healthFactor').textContent = '∞';
     $('riskFill').style.width = '0%';
     return;
   }
@@ -127,4 +165,6 @@ function updateRisk(){
 $('previewBorrow').addEventListener('click',updateRisk);
 $('supplyAmount').addEventListener('input',updateRisk);
 $('borrowAmount').addEventListener('input',updateRisk);
+
 setMode(false);
+syncProtocolStatus();
