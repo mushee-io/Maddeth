@@ -63,6 +63,15 @@ contract MaddethPoolTest is TestBase {
         vm.stopPrank();
     }
 
+    function testThirdPartyCanRepayForBorrower() public {
+        vm.prank(borrower);
+        pool.borrow(address(usdc), 500e6);
+
+        vm.prank(liquidator);
+        pool.repayFor(borrower, address(usdc), 100e6);
+        assertEq(pool.borrowed(borrower, address(usdc)), 400e6, "third-party repayment failed");
+    }
+
     function testInterestAccruesToBorrowersSuppliersAndReserves() public {
         vm.prank(borrower);
         pool.borrow(address(usdc), 500e6);
@@ -100,6 +109,36 @@ contract MaddethPoolTest is TestBase {
         assertGt(kub.balanceOf(liquidator), liquidatorKubBefore, "collateral not seized");
     }
 
+    function testLiquidationRepayIsCappedByAvailableCollateral() public {
+        vm.prank(borrower);
+        pool.borrow(address(usdc), 700e6);
+        oracle.setPrice(address(kub), 1e18);
+
+        uint256 liquidatorUsdcBefore = usdc.balanceOf(liquidator);
+        vm.prank(liquidator);
+        pool.liquidate(borrower, address(usdc), address(kub), 350e6);
+        uint256 spent = liquidatorUsdcBefore - usdc.balanceOf(liquidator);
+
+        assertLt(spent, 100e6, "liquidator overpaid for exhausted collateral");
+        assertGt(spent, 90e6, "liquidation cap unexpectedly low");
+    }
+
+    function testBadDebtIsSocializedOnlyAfterCollateralExhaustion() public {
+        vm.prank(borrower);
+        pool.borrow(address(usdc), 700e6);
+        oracle.setPrice(address(kub), 1e18);
+
+        vm.prank(liquidator);
+        pool.liquidate(borrower, address(usdc), address(kub), 350e6);
+
+        uint256 supplierBefore = pool.supplied(lender, address(usdc));
+        pool.absorbBadDebt(borrower, address(usdc));
+        uint256 supplierAfter = pool.supplied(lender, address(usdc));
+
+        assertEq(pool.borrowed(borrower, address(usdc)), 0, "bad debt still recorded");
+        assertLt(supplierAfter, supplierBefore, "supplier loss not socialized");
+    }
+
     function testStaleOracleFailsClosed() public {
         vm.warp(block.timestamp + 31 minutes);
         vm.startPrank(borrower);
@@ -118,6 +157,21 @@ contract MaddethPoolTest is TestBase {
         vm.expectRevert();
         pool.supply(address(usdc), 1e6);
         vm.stopPrank();
+    }
+
+    function testEmergencyProtocolPauseBlocksRiskIncreaseButAllowsRepay() public {
+        vm.prank(borrower);
+        pool.borrow(address(usdc), 100e6);
+        usdc.mint(borrower, 100e6);
+        pool.setProtocolPaused(true);
+
+        vm.startPrank(borrower);
+        vm.expectRevert();
+        pool.borrow(address(usdc), 1e6);
+        pool.repay(address(usdc), 100e6);
+        vm.stopPrank();
+
+        assertEq(pool.borrowed(borrower, address(usdc)), 0, "repay blocked during pause");
     }
 
     function testSupplyAndBorrowCaps() public {
