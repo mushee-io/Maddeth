@@ -34,12 +34,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check browser and deployment JavaScript syntax
+      - name: Check frontend and deployment integrity
         run: |
           node --input-type=module --check < src/protocol-config.js
           node --input-type=module --check < src/protocol.js
           node --input-type=module --check < src/app.js
+          node --input-type=module --check < src/ui.js
           node --check scripts/apply-deployment.mjs
+          node --check scripts/check-frontend.mjs
+          node scripts/check-frontend.mjs
+          git diff --check
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
