@@ -1,0 +1,16 @@
+{
+  "name": "KUB Testnet",
+  "chainId": 25925,
+  "chainIdHex": "0x6545",
+  "rpcUrl": "https://rpc-testnet.bitkubchain.io",
+  "nativeCurrency": "tKUB",
+  "explorer": "https://testnet.kubscan.com",
+  "contracts": {
+    "maddethPool": null,
+    "oracle": null,
+    "rwaVaultFactory": null,
+    "wrappedKUB": null,
+    "testUSDT": null,
+    "testUSDC": null
+  }
+}
