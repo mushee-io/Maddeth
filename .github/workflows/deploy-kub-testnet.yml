@@ -68,6 +68,7 @@ jobs:
           node --input-type=module --check < src/protocol-config.js
           node --input-type=module --check < src/protocol.js
           node --input-type=module --check < src/app.js
+          node --check scripts/apply-deployment.mjs
           forge build
           forge test -vvv
 
@@ -90,13 +91,39 @@ jobs:
         run: |
           if git diff --quiet; then
             echo "No registry changes to commit."
-            exit 0
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/protocol-config.js config/kub-testnet.json
+            git commit -m "Record live Maddeth KUB Testnet deployment"
+            git push origin HEAD:main
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/protocol-config.js config/kub-testnet.json
-          git commit -m "Record live Maddeth KUB Testnet deployment"
-          git push origin HEAD:main
+
+      - name: Load deployed contracts for smoke test
+        shell: bash
+        run: |
+          echo "MADDETH_POOL=$(node -p \"require('./deployment-kub-testnet.json').maddethPool\")" >> "$GITHUB_ENV"
+          echo "WRAPPED_KUB=$(node -p \"require('./deployment-kub-testnet.json').wrappedKUB\")" >> "$GITHUB_ENV"
+          echo "TEST_USDC=$(node -p \"require('./deployment-kub-testnet.json').testUSDC\")" >> "$GITHUB_ENV"
+
+      - name: End-to-end KUB Testnet lending smoke test
+        run: |
+          forge script script/SmokeKubTestnet.s.sol:SmokeKubTestnet \
+            --rpc-url "$KUB_TESTNET_RPC_URL" \
+            --broadcast \
+            -vvvv
+
+      - name: Verify deployed bytecode exists
+        shell: bash
+        run: |
+          for ADDRESS in "$MADDETH_POOL" "$WRAPPED_KUB" "$TEST_USDC"; do
+            CODE=$(cast code "$ADDRESS" --rpc-url "$KUB_TESTNET_RPC_URL")
+            if [ "$CODE" = "0x" ]; then
+              echo "No bytecode at $ADDRESS"
+              exit 1
+            fi
+          done
+          echo "KUB Testnet bytecode checks passed."
 
       - name: Preserve deployment artifacts
         if: always()
@@ -107,5 +134,7 @@ jobs:
             deployment-kub-testnet.json
             broadcast/DeployKubTestnet.s.sol/25925/run-latest.json
             broadcast/DeployKubTestnet.s.sol/25925/run-*.json
+            broadcast/SmokeKubTestnet.s.sol/25925/run-latest.json
+            broadcast/SmokeKubTestnet.s.sol/25925/run-*.json
           if-no-files-found: warn
           retention-days: 30
