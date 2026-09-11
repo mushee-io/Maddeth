@@ -7,21 +7,25 @@ on:
       - "contracts/**"
       - "test/**"
       - "script/**"
+      - "scripts/**"
       - "src/**"
       - "config/**"
       - "index.html"
       - "foundry.toml"
       - ".github/workflows/contracts.yml"
+      - ".github/workflows/deploy-kub-testnet.yml"
   pull_request:
     paths:
       - "contracts/**"
       - "test/**"
       - "script/**"
+      - "scripts/**"
       - "src/**"
       - "config/**"
       - "index.html"
       - "foundry.toml"
       - ".github/workflows/contracts.yml"
+      - ".github/workflows/deploy-kub-testnet.yml"
 
 jobs:
   build-test:
@@ -30,11 +34,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check browser JavaScript syntax
+      - name: Check browser and deployment JavaScript syntax
         run: |
           node --input-type=module --check < src/protocol-config.js
           node --input-type=module --check < src/protocol.js
           node --input-type=module --check < src/app.js
+          node --check scripts/apply-deployment.mjs
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
