@@ -297,15 +297,17 @@ contract MaddethPool {
         uint256 debt = userDebtShares * debtS.borrowIndex / WAD;
         require(debt > 0, "NO_DEBT");
 
-        uint256 paid = _cappedLiquidationRepay(user, debtAsset, collateralAsset, repayAmount, debt);
-        uint256 seize = _seizeForRepay(debtAsset, collateralAsset, paid);
+        (uint256 paid, bool collateralLimited) = _cappedLiquidationRepay(user, debtAsset, collateralAsset, repayAmount, debt);
         uint256 availableCollateral = supplyShares[user][collateralAsset] * colS.supplyIndex / WAD;
+        uint256 seize = collateralLimited ? availableCollateral : _seizeForRepay(debtAsset, collateralAsset, paid);
         if (seize > availableCollateral) seize = availableCollateral;
         require(seize > 0, "NO_COLLATERAL");
 
         uint256 debtSharesToBurn = paid >= debt ? userDebtShares : paid * WAD / debtS.borrowIndex;
         require(debtSharesToBurn > 0, "ZERO_DEBT_SHARES");
-        uint256 colSharesToBurn = _divUp(seize * WAD, colS.supplyIndex);
+        uint256 colSharesToBurn = collateralLimited
+            ? supplyShares[user][collateralAsset]
+            : _divUp(seize * WAD, colS.supplyIndex);
         if (colSharesToBurn > supplyShares[user][collateralAsset]) {
             colSharesToBurn = supplyShares[user][collateralAsset];
         }
@@ -415,10 +417,11 @@ contract MaddethPool {
         address collateralAsset,
         uint256 requested,
         uint256 debt
-    ) internal view returns (uint256 paid) {
+    ) internal view returns (uint256 paid, bool collateralLimited) {
         uint256 maxClose = debt * CLOSE_FACTOR_BPS / BPS;
         if (maxClose == 0) maxClose = debt;
-        paid = requested > maxClose ? maxClose : requested;
+        uint256 closeLimited = requested > maxClose ? maxClose : requested;
+        paid = closeLimited;
 
         uint256 availableCollateral = supplied(user, collateralAsset);
         require(availableCollateral > 0, "NO_COLLATERAL");
@@ -430,7 +433,10 @@ contract MaddethPool {
         uint256 collateralUsd = availableCollateral * colPrice / (10 ** colDec);
         uint256 maxRepayUsd = collateralUsd * BPS / (BPS + markets[collateralAsset].liquidationBonusBps);
         uint256 maxRepayByCollateral = maxRepayUsd * (10 ** debtDec) / debtPrice;
-        if (paid > maxRepayByCollateral) paid = maxRepayByCollateral;
+        if (paid > maxRepayByCollateral) {
+            paid = maxRepayByCollateral;
+            collateralLimited = true;
+        }
         require(paid > 0, "COLLATERAL_DUST");
     }
 
