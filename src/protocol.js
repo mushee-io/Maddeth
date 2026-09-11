@@ -1,10 +1,23 @@
 import { KUB_TESTNET, MADDETH_DEPLOYMENT, configuredContract, deploymentReady } from './protocol-config.js';
 
 const selectorCache = new Map();
+let rpcId = 1;
 
 function provider() {
   if (!window.ethereum) throw new Error('No EVM wallet detected');
   return window.ethereum;
+}
+
+async function rpcRequest(method, params = []) {
+  const response = await fetch(KUB_TESTNET.rpcUrls[0], {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: rpcId++, method, params })
+  });
+  if (!response.ok) throw new Error(`KUB RPC HTTP ${response.status}`);
+  const payload = await response.json();
+  if (payload.error) throw new Error(payload.error.message || 'KUB RPC request failed');
+  return payload.result;
 }
 
 function utf8ToHex(value) {
@@ -13,7 +26,7 @@ function utf8ToHex(value) {
 
 async function selector(signature) {
   if (selectorCache.has(signature)) return selectorCache.get(signature);
-  const hash = await provider().request({ method: 'web3_sha3', params: [utf8ToHex(signature)] });
+  const hash = await rpcRequest('web3_sha3', [utf8ToHex(signature)]);
   const result = hash.slice(0, 10);
   selectorCache.set(signature, result);
   return result;
@@ -43,7 +56,7 @@ function decodeWords(data) {
 }
 
 async function ethCall(to, data) {
-  return provider().request({ method: 'eth_call', params: [{ to, data }, 'latest'] });
+  return rpcRequest('eth_call', [{ to, data }, 'latest']);
 }
 
 async function readNoArgUint(to, signature) {
@@ -59,20 +72,21 @@ async function readAddressArgWords(to, signature, address) {
 
 async function sendTransaction({ from, to, data, value = null }) {
   if (!from) throw new Error('Connect a wallet first');
-  const chainHex = await provider().request({ method: 'eth_chainId' });
+  const wallet = provider();
+  const chainHex = await wallet.request({ method: 'eth_chainId' });
   if (Number.parseInt(chainHex, 16) !== KUB_TESTNET.chainId) throw new Error('Switch to KUB Testnet first');
   const tx = { from, to, data };
   if (value !== null) tx.value = `0x${BigInt(value).toString(16)}`;
 
   // Fail before opening a wallet confirmation if the transaction cannot execute against current state.
-  await provider().request({ method: 'eth_estimateGas', params: [tx] });
-  return provider().request({ method: 'eth_sendTransaction', params: [tx] });
+  await wallet.request({ method: 'eth_estimateGas', params: [tx] });
+  return wallet.request({ method: 'eth_sendTransaction', params: [tx] });
 }
 
 export async function waitForReceipt(txHash, { timeoutMs = 120000, intervalMs = 1200 } = {}) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
-    const receipt = await provider().request({ method: 'eth_getTransactionReceipt', params: [txHash] });
+    const receipt = await rpcRequest('eth_getTransactionReceipt', [txHash]);
     if (receipt) {
       if (receipt.status === '0x0') throw new Error(`Transaction reverted: ${txHash}`);
       return receipt;
