@@ -75,8 +75,8 @@ jobs:
           set -euo pipefail
           node --input-type=module --check < src/protocol-config.js
           node --input-type=module --check < src/protocol.js
-          node --input-type=module --check < src/app.js
-          node --input-type=module --check < src/ui.js
+          node --input-type=module --check < src/site.js
+          node --input-type=module --check < src/app-pages.js
           node --check scripts/apply-deployment.mjs
           node --check scripts/check-frontend.mjs
           node scripts/check-frontend.mjs
