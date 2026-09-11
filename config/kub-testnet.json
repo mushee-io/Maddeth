@@ -5,12 +5,23 @@
   "rpcUrl": "https://rpc-testnet.bitkubchain.io",
   "nativeCurrency": "tKUB",
   "explorer": "https://testnet.kubscan.com",
+  "deploymentStatus": "not-deployed",
   "contracts": {
     "maddethPool": null,
     "oracle": null,
+    "interestRateModel": null,
     "rwaVaultFactory": null,
     "wrappedKUB": null,
     "testUSDT": null,
     "testUSDC": null
-  }
+  },
+  "oracleFeeds": {
+    "KUB_USDT": "0x6Cc1316A9695E435875A5CDA6e60066114f8A395",
+    "USDC_USDT": "0x6f1373EC8d0562be98a98FE46844f057284B7A61"
+  },
+  "notes": [
+    "Protocol contract addresses must remain null until a real KUB Testnet broadcast succeeds.",
+    "testUSDC and testUSDT are mintable Maddeth test assets and are not real stablecoins.",
+    "Oracle consumer authorization may be required by Bitkub Oracle after deployment."
+  ]
 }
