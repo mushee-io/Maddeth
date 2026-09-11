@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f4efe8" />
+  <meta name="description" content="Maddeth — KUB-native lending and RWA credit infrastructure." />
+  <title>Maddeth — Credit infrastructure for KUB</title>
+  <link rel="stylesheet" href="./src/styles.css" />
+</head>
+<body>
+  <div class="announcement">KUB TESTNET · CHAIN 25925 · TESTNET-FIRST</div>
+  <header class="topbar">
+    <a class="brand" href="#home" aria-label="Maddeth home">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span>Maddeth</span>
+    </a>
+    <nav class="nav" aria-label="Primary">
+      <button data-view="markets">Markets</button>
+      <button data-view="borrow">Borrow</button>
+      <button data-view="rwa">RWA</button>
+      <button data-view="portfolio">Portfolio</button>
+      <button data-view="protocol">Protocol</button>
+      <a href="#docs">Docs</a>
+    </nav>
+    <div class="wallet-actions">
+      <span id="networkPill" class="network-pill">Not connected</span>
+      <button id="connectWallet" class="primary-btn">Connect wallet</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="home" class="hero section-grid">
+      <div class="hero-copy">
+        <div class="eyebrow">KUB-NATIVE CREDIT MARKETS</div>
+        <h1>Capital should work.<br/>Collateral should move.</h1>
+        <p>Maddeth is lending and real-world credit infrastructure for KUB Chain. Supply liquidity, borrow transparently, and access isolated RWA markets without mixing risks.</p>
+        <div class="hero-actions">
+          <button class="primary-btn" data-view="borrow">Launch app</button>
+          <button class="secondary-btn" data-view="protocol">View risk model ↗</button>
+        </div>
+        <div class="status-line">
+          <span class="dot"></span>
+          <strong>Testnet build</strong>
+          <span id="contractStatus">Contracts not deployed on KUB Testnet yet</span>
+        </div>
+      </div>
+      <div class="hero-art" aria-label="Maddeth protocol diagram">
+        <div class="orbit orbit-a"></div><div class="orbit orbit-b"></div><div class="orbit orbit-c"></div>
+        <div class="core">M</div>
+        <div class="art-card art-supply"><small>SUPPLY</small><strong>Earn from borrowers</strong></div>
+        <div class="art-card art-borrow"><small>BORROW</small><strong>Keep exposure, unlock liquidity</strong></div>
+        <div class="art-card art-rwa"><small>RWA</small><strong>Isolated credit vaults</strong></div>
+      </div>
+    </section>
+
+    <section class="capabilities dark-section">
+      <div class="section-kicker">01 — CREDIT PRIMITIVES</div>
+      <h2>One credit layer.<br/>Separated risk.</h2>
+      <div class="cap-grid">
+        <article><span class="cap-icon">↗</span><h3>Earn</h3><p>Supply approved assets and earn utilisation-driven interest from active borrowers.</p></article>
+        <article><span class="cap-icon">↘</span><h3>Borrow</h3><p>Overcollateralised loans with visible LTV, health factor and liquidation thresholds.</p></article>
+        <article><span class="cap-icon">◇</span><h3>RWA Credit</h3><p>Permissioned isolated vaults for tokenised real-world credit without cross-pool contagion.</p></article>
+        <article><span class="cap-icon">◎</span><h3>Liquidity Infrastructure</h3><p>Caps, utilisation curves, oracle checks, liquidations and transparent risk controls.</p></article>
+      </div>
+    </section>
+
+    <section id="appSection" class="app-shell">
+      <div class="app-head">
+        <div>
+          <div class="eyebrow">MADD ETH APP · KUB TESTNET</div>
+          <h2 id="viewTitle">Markets</h2>
+        </div>
+        <div class="mode-switch" role="group" aria-label="Data mode">
+          <button id="liveMode" class="active">Live</button>
+          <button id="sandboxMode">Sandbox</button>
+        </div>
+      </div>
+
+      <div id="liveNotice" class="notice">Live mode reads connected wallet and KUB network state. Protocol values remain unavailable until contract addresses are configured.</div>
+      <div id="sandboxNotice" class="notice warning hidden">Sandbox uses clearly labelled demonstration values only. They are not on-chain balances or protocol TVL.</div>
+
+      <div id="marketsView" class="view active">
+        <div class="metrics-row">
+          <div class="metric"><small>NETWORK</small><strong>KUB Testnet</strong><span>Chain 25925</span></div>
+          <div class="metric"><small>PROTOCOL TVL</small><strong data-live="—" data-sandbox="$2.84M">—</strong><span>Live after deployment</span></div>
+          <div class="metric"><small>AVAILABLE LIQUIDITY</small><strong data-live="—" data-sandbox="$1.67M">—</strong><span>Across active pools</span></div>
+          <div class="metric"><small>ACTIVE MARKETS</small><strong data-live="0" data-sandbox="5">0</strong><span>Configured contracts</span></div>
+        </div>
+        <div class="table-card">
+          <div class="table-head"><h3>Permissionless markets</h3><span>Crypto pools</span></div>
+          <div class="market-row header"><span>Asset</span><span>Supply APY</span><span>Borrow APR</span><span>Utilisation</span><span>Liquidity</span></div>
+          <div class="market-row"><span class="asset"><b>KUB</b><small>native / wrapped adapter</small></span><span data-live="—" data-sandbox="4.18%">—</span><span data-live="—" data-sandbox="6.42%">—</span><span data-live="—" data-sandbox="61%">—</span><span data-live="—" data-sandbox="$620K">—</span></div>
+          <div class="market-row"><span class="asset"><b>USDT</b><small>testnet asset TBD</small></span><span data-live="—" data-sandbox="5.04%">—</span><span data-live="—" data-sandbox="7.20%">—</span><span data-live="—" data-sandbox="67%">—</span><span data-live="—" data-sandbox="$840K">—</span></div>
+          <div class="market-row"><span class="asset"><b>USDC</b><small>testnet asset TBD</small></span><span data-live="—" data-sandbox="4.72%">—</span><span data-live="—" data-sandbox="6.95%">—</span><span data-live="—" data-sandbox="64%">—</span><span data-live="—" data-sandbox="$210K">—</span></div>
+        </div>
+      </div>
+
+      <div id="borrowView" class="view">
+        <div class="borrow-grid">
+          <div class="borrow-card">
+            <div class="dual-inputs">
+              <div class="token-input">
+                <label>Supply collateral</label>
+                <div class="input-box"><select id="supplyAsset"><option>tKUB</option><option>Mock USDT</option></select><input id="supplyAmount" inputmode="decimal" placeholder="0.00" /></div>
+                <small>Wallet balance: <span id="walletBalance">—</span></small>
+              </div>
+              <div class="token-input">
+                <label>Borrow asset</label>
+                <div class="input-box"><select id="borrowAsset"><option>Mock USDT</option><option>Mock USDC</option></select><input id="borrowAmount" inputmode="decimal" placeholder="0.00" /></div>
+                <small>Available liquidity: <span data-live="—" data-sandbox="420,000">—</span></small>
+              </div>
+            </div>
+            <div class="risk-panel">
+              <div class="risk-top"><div><small>Loan to Value</small><strong id="ltvValue">0.00%</strong></div><div><small>Health factor</small><strong id="healthFactor">∞</strong></div></div>
+              <div class="risk-track"><span id="riskFill"></span><i class="threshold" title="Liquidation threshold"></i></div>
+              <div class="risk-labels"><span>Conservative</span><span>Moderate</span><span>Aggressive</span><span>Liquidation</span></div>
+            </div>
+            <div class="action-row">
+              <button id="previewBorrow" class="secondary-btn">Preview risk</button>
+              <button id="submitBorrow" class="primary-btn" disabled>Contracts not deployed</button>
+            </div>
+          </div>
+          <aside class="rate-card">
+            <h3>Position economics</h3>
+            <div><span>Borrow APR</span><strong data-live="—" data-sandbox="7.20%">—</strong></div>
+            <div><span>Supply APY</span><strong data-live="—" data-sandbox="4.18%">—</strong></div>
+            <div><span>Max LTV</span><strong>70%</strong></div>
+            <div><span>Liquidation threshold</span><strong>82.5%</strong></div>
+            <p>Rates are utilisation-driven. Risk parameters are market-specific and subject to caps.</p>
+          </aside>
+        </div>
+      </div>
+
+      <div id="rwaView" class="view">
+        <div class="rwa-intro">
+          <div><div class="eyebrow">ISOLATED CREDIT</div><h3>Real-world assets belong in their own risk domains.</h3></div>
+          <p>Maddeth RWA markets are separate vaults with individual issuers, caps, maturity, collateral ratios and permission rules. A failure in one RWA vault cannot borrow from or drain another market.</p>
+        </div>
+        <div class="rwa-grid">
+          <article class="rwa-card"><div class="status pending">DESIGN STAGE</div><h4>Tokenised Treasury Vault</h4><dl><div><dt>Issuer</dt><dd>Not configured</dd></div><div><dt>Risk tier</dt><dd>A</dd></div><div><dt>Collateral ratio</dt><dd>120%</dd></div><div><dt>Cap</dt><dd>—</dd></div><div><dt>Maturity</dt><dd>Rolling</dd></div></dl><button disabled>Awaiting issuer integration</button></article>
+          <article class="rwa-card"><div class="status pending">DESIGN STAGE</div><h4>Invoice Credit Vault</h4><dl><div><dt>Issuer</dt><dd>Not configured</dd></div><div><dt>Risk tier</dt><dd>B</dd></div><div><dt>Collateral ratio</dt><dd>140%</dd></div><div><dt>Cap</dt><dd>—</dd></div><div><dt>Maturity</dt><dd>30–90 days</dd></div></dl><button disabled>Awaiting issuer integration</button></article>
+          <article class="rwa-card"><div class="status pending">DESIGN STAGE</div><h4>Property Credit Vault</h4><dl><div><dt>Issuer</dt><dd>Not configured</dd></div><div><dt>Risk tier</dt><dd>B+</dd></div><div><dt>Collateral ratio</dt><dd>150%</dd></div><div><dt>Cap</dt><dd>—</dd></div><div><dt>Maturity</dt><dd>12 months</dd></div></dl><button disabled>Awaiting issuer integration</button></article>
+        </div>
+      </div>
+
+      <div id="portfolioView" class="view">
+        <div class="empty-state"><div class="empty-symbol">◎</div><h3 id="portfolioTitle">Connect a wallet to view your portfolio</h3><p>Wallet balances, supplied assets, borrows, health factors and transaction history will appear here.</p><button id="portfolioConnect" class="primary-btn">Connect wallet</button></div>
+      </div>
+
+      <div id="protocolView" class="view">
+        <div class="protocol-grid">
+          <article><small>01</small><h3>Pooled lending</h3><p>Permissionless crypto assets share liquidity only inside approved lending markets.</p></article>
+          <article><small>02</small><h3>Isolated RWA vaults</h3><p>Every RWA market has independent debt accounting, caps, oracle and access policy.</p></article>
+          <article><small>03</small><h3>Fail-closed oracle checks</h3><p>Borrowing and liquidation paths reject stale or invalid prices instead of substituting guessed values.</p></article>
+          <article><small>04</small><h3>Risk administration</h3><p>Supply caps, borrow caps, LTV, liquidation thresholds and pause controls are explicit on-chain parameters.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="docs" class="docs section-grid">
+      <div><div class="section-kicker">02 — KUB INTEGRATION</div><h2>Built for KUB Testnet first.</h2></div>
+      <div class="docs-list">
+        <div><span>Network</span><strong>KUB Testnet</strong></div>
+        <div><span>Chain ID</span><strong>25925</strong></div>
+        <div><span>Native currency</span><strong>tKUB</strong></div>
+        <div><span>RPC</span><code>https://rpc-testnet.bitkubchain.io</code></div>
+        <div><span>Explorer</span><code>https://testnet.kubscan.com</code></div>
+        <div><span>Wallet</span><strong>EIP-1193 / MetaMask first</strong></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="brand"><span class="brand-mark"><i></i><i></i><i></i></span><span>Maddeth</span></div>
+    <p>Credit infrastructure for KUB. Testnet software — not financial advice.</p>
+    <div><a href="#docs">Docs</a><a href="#appSection" data-view="protocol">Risk</a><a href="#appSection" data-view="rwa">RWA</a></div>
+  </footer>
+
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
