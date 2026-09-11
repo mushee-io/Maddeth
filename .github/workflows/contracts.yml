@@ -1,4 +1,4 @@
-name: Contracts
+name: Build and Test
 
 on:
   push:
@@ -6,21 +6,35 @@ on:
     paths:
       - "contracts/**"
       - "test/**"
+      - "script/**"
+      - "src/**"
+      - "config/**"
+      - "index.html"
       - "foundry.toml"
       - ".github/workflows/contracts.yml"
   pull_request:
     paths:
       - "contracts/**"
       - "test/**"
+      - "script/**"
+      - "src/**"
+      - "config/**"
+      - "index.html"
       - "foundry.toml"
       - ".github/workflows/contracts.yml"
 
 jobs:
-  forge-test:
+  build-test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Check browser JavaScript syntax
+        run: |
+          node --input-type=module --check < src/protocol-config.js
+          node --input-type=module --check < src/protocol.js
+          node --input-type=module --check < src/app.js
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
