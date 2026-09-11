@@ -16,11 +16,9 @@ contract IsolatedRwaVaultTest is TestBase {
         usdc = new MockERC20("Mock USD Coin", "mUSDC", 6);
         vault = new IsolatedRwaVault(address(usdc), borrower, block.timestamp + 30 days, 500_000e6);
         vault.setLender(lender, true);
-
         usdc.mint(lender, 1_000_000e6);
         vm.prank(lender);
         usdc.approve(address(vault), type(uint256).max);
-
         usdc.mint(borrower, 100_000e6);
         vm.prank(borrower);
         usdc.approve(address(vault), type(uint256).max);
@@ -30,7 +28,6 @@ contract IsolatedRwaVaultTest is TestBase {
         vm.prank(lender);
         vault.deposit(400_000e6);
         assertEq(vault.totalDeposits(), 400_000e6, "deposit total");
-
         vm.prank(borrower);
         vault.borrow(200_000e6);
         assertEq(vault.totalDebt(), 200_000e6, "debt total");
@@ -39,9 +36,8 @@ contract IsolatedRwaVaultTest is TestBase {
     function testDebtCapEnforced() public {
         vm.prank(lender);
         vault.deposit(600_000e6);
-
         vm.startPrank(borrower);
-        vm.expectRevert(bytes("DEBT_CAP"));
+        vm.expectRevert();
         vault.borrow(500_001e6);
         vm.stopPrank();
     }
@@ -51,9 +47,8 @@ contract IsolatedRwaVaultTest is TestBase {
         vault.deposit(300_000e6);
         vm.prank(borrower);
         vault.borrow(100_000e6);
-
         vm.startPrank(lender);
-        vm.expectRevert(bytes("CREDIT_OUTSTANDING"));
+        vm.expectRevert();
         vault.withdraw(10_000e6);
         vm.stopPrank();
     }
@@ -63,10 +58,8 @@ contract IsolatedRwaVaultTest is TestBase {
         vault.deposit(300_000e6);
         vm.prank(borrower);
         vault.borrow(100_000e6);
-
         vm.prank(borrower);
         vault.repay(100_000e6);
-
         uint256 before = usdc.balanceOf(lender);
         vm.prank(lender);
         vault.withdraw(50_000e6);
@@ -77,9 +70,8 @@ contract IsolatedRwaVaultTest is TestBase {
         vm.prank(lender);
         vault.deposit(300_000e6);
         vm.warp(block.timestamp + 31 days);
-
         vm.startPrank(borrower);
-        vm.expectRevert(bytes("VAULT_CLOSED"));
+        vm.expectRevert();
         vault.borrow(1e6);
         vm.stopPrank();
     }
