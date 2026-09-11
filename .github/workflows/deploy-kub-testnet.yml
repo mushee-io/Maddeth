@@ -1,0 +1,85 @@
+name: Deploy KUB Testnet
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type DEPLOY-KUB-TESTNET to broadcast real transactions on chain 25925"
+        required: true
+        type: string
+
+concurrency:
+  group: maddeth-kub-testnet-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: kub-testnet
+    env:
+      KUB_TESTNET_RPC_URL: https://rpc-testnet.bitkubchain.io
+      PRIVATE_KEY: ${{ secrets.KUB_TESTNET_PRIVATE_KEY }}
+    steps:
+      - name: Require explicit confirmation
+        shell: bash
+        run: |
+          if [ "${{ inputs.confirm }}" != "DEPLOY-KUB-TESTNET" ]; then
+            echo "Deployment confirmation did not match."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Require funded signer secret
+        shell: bash
+        run: |
+          if [ -z "$PRIVATE_KEY" ]; then
+            echo "Missing KUB_TESTNET_PRIVATE_KEY repository/environment secret."
+            exit 1
+          fi
+          DEPLOYER=$(cast wallet address --private-key "$PRIVATE_KEY")
+          BALANCE=$(cast balance "$DEPLOYER" --rpc-url "$KUB_TESTNET_RPC_URL")
+          CHAIN_ID=$(cast chain-id --rpc-url "$KUB_TESTNET_RPC_URL")
+          echo "KUB Testnet chain id: $CHAIN_ID"
+          echo "Deployer: $DEPLOYER"
+          echo "Native balance (wei): $BALANCE"
+          if [ "$CHAIN_ID" != "25925" ]; then
+            echo "Refusing to deploy: RPC is not KUB Testnet chain 25925."
+            exit 1
+          fi
+          if [ "$BALANCE" = "0" ]; then
+            echo "Refusing to deploy: deployer has no tKUB for gas."
+            exit 1
+          fi
+
+      - name: Build and test before broadcast
+        run: |
+          forge build
+          forge test -vvv
+
+      - name: Broadcast Maddeth deployment
+        run: |
+          forge script script/DeployKubTestnet.s.sol:DeployKubTestnet \
+            --rpc-url "$KUB_TESTNET_RPC_URL" \
+            --broadcast \
+            -vvvv
+
+      - name: Preserve Foundry broadcast receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kub-testnet-broadcast-${{ github.run_id }}
+          path: |
+            broadcast/DeployKubTestnet.s.sol/25925/run-latest.json
+            broadcast/DeployKubTestnet.s.sol/25925/run-*.json
+          if-no-files-found: warn
+          retention-days: 30
