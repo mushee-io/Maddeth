@@ -18,6 +18,7 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: kub-testnet
     env:
       KUB_TESTNET_RPC_URL: https://rpc-testnet.bitkubchain.io
@@ -26,6 +27,7 @@ jobs:
       - name: Require explicit confirmation
         shell: bash
         run: |
+          set -euo pipefail
           if [ "${{ inputs.confirm }}" != "DEPLOY-KUB-TESTNET" ]; then
             echo "Deployment confirmation did not match."
             exit 1
@@ -41,16 +43,18 @@ jobs:
         with:
           version: stable
 
-      - name: Require funded signer secret
+      - name: Require correct RPC and funded signer
         shell: bash
         run: |
+          set -euo pipefail
           if [ -z "$PRIVATE_KEY" ]; then
-            echo "Missing KUB_TESTNET_PRIVATE_KEY repository/environment secret."
+            echo "Missing KUB_TESTNET_PRIVATE_KEY environment secret."
             exit 1
           fi
           DEPLOYER=$(cast wallet address --private-key "$PRIVATE_KEY")
           BALANCE=$(cast balance "$DEPLOYER" --rpc-url "$KUB_TESTNET_RPC_URL")
           CHAIN_ID=$(cast chain-id --rpc-url "$KUB_TESTNET_RPC_URL")
+          MIN_BALANCE=100000000000000000
           echo "KUB Testnet chain id: $CHAIN_ID"
           echo "Deployer: $DEPLOYER"
           echo "Native balance (wei): $BALANCE"
@@ -58,13 +62,17 @@ jobs:
             echo "Refusing to deploy: RPC is not KUB Testnet chain 25925."
             exit 1
           fi
-          if [ "$BALANCE" = "0" ]; then
-            echo "Refusing to deploy: deployer has no tKUB for gas."
+          if [ "$BALANCE" -lt "$MIN_BALANCE" ]; then
+            echo "Refusing to deploy: keep at least 0.1 tKUB available for deployment and smoke-test gas."
             exit 1
           fi
 
+      - name: Require clean source tree
+        run: git diff --exit-code
+
       - name: Build and test before broadcast
         run: |
+          set -euo pipefail
           node --input-type=module --check < src/protocol-config.js
           node --input-type=module --check < src/protocol.js
           node --input-type=module --check < src/app.js
@@ -74,49 +82,35 @@ jobs:
 
       - name: Broadcast Maddeth deployment
         run: |
+          set -euo pipefail
           forge script script/DeployKubTestnet.s.sol:DeployKubTestnet \
             --rpc-url "$KUB_TESTNET_RPC_URL" \
             --broadcast \
             -vvvv
 
-      - name: Apply canonical deployment addresses
+      - name: Load deployed contracts for validation
+        shell: bash
         run: |
+          set -euo pipefail
           test -f deployment-kub-testnet.json
-          node scripts/apply-deployment.mjs deployment-kub-testnet.json
-          node --input-type=module --check < src/protocol-config.js
-          git diff --check
-
-      - name: Commit canonical KUB Testnet registry
-        shell: bash
-        run: |
-          if git diff --quiet; then
-            echo "No registry changes to commit."
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add src/protocol-config.js config/kub-testnet.json
-            git commit -m "Record live Maddeth KUB Testnet deployment"
-            git push origin HEAD:main
-          fi
-
-      - name: Load deployed contracts for smoke test
-        shell: bash
-        run: |
           echo "MADDETH_POOL=$(node -p \"require('./deployment-kub-testnet.json').maddethPool\")" >> "$GITHUB_ENV"
+          echo "MADDETH_LENS=$(node -p \"require('./deployment-kub-testnet.json').maddethLens\")" >> "$GITHUB_ENV"
+          echo "ORACLE=$(node -p \"require('./deployment-kub-testnet.json').oracle\")" >> "$GITHUB_ENV"
+          echo "RWA_FACTORY=$(node -p \"require('./deployment-kub-testnet.json').rwaVaultFactory\")" >> "$GITHUB_ENV"
+          echo "SAMPLE_RWA=$(node -p \"require('./deployment-kub-testnet.json').sampleRwaVault\")" >> "$GITHUB_ENV"
           echo "WRAPPED_KUB=$(node -p \"require('./deployment-kub-testnet.json').wrappedKUB\")" >> "$GITHUB_ENV"
           echo "TEST_USDC=$(node -p \"require('./deployment-kub-testnet.json').testUSDC\")" >> "$GITHUB_ENV"
+          echo "TEST_USDT=$(node -p \"require('./deployment-kub-testnet.json').testUSDT\")" >> "$GITHUB_ENV"
 
-      - name: End-to-end KUB Testnet lending smoke test
-        run: |
-          forge script script/SmokeKubTestnet.s.sol:SmokeKubTestnet \
-            --rpc-url "$KUB_TESTNET_RPC_URL" \
-            --broadcast \
-            -vvvv
-
-      - name: Verify deployed bytecode exists
+      - name: Verify deployed bytecode exists before smoke test
         shell: bash
         run: |
-          for ADDRESS in "$MADDETH_POOL" "$WRAPPED_KUB" "$TEST_USDC"; do
+          set -euo pipefail
+          for ADDRESS in "$MADDETH_POOL" "$MADDETH_LENS" "$ORACLE" "$RWA_FACTORY" "$SAMPLE_RWA" "$WRAPPED_KUB" "$TEST_USDC" "$TEST_USDT"; do
+            if ! [[ "$ADDRESS" =~ ^0x[0-9a-fA-F]{40}$ ]]; then
+              echo "Invalid deployment address: $ADDRESS"
+              exit 1
+            fi
             CODE=$(cast code "$ADDRESS" --rpc-url "$KUB_TESTNET_RPC_URL")
             if [ "$CODE" = "0x" ]; then
               echo "No bytecode at $ADDRESS"
@@ -124,6 +118,35 @@ jobs:
             fi
           done
           echo "KUB Testnet bytecode checks passed."
+
+      - name: End-to-end KUB Testnet lending smoke test
+        run: |
+          set -euo pipefail
+          forge script script/SmokeKubTestnet.s.sol:SmokeKubTestnet \
+            --rpc-url "$KUB_TESTNET_RPC_URL" \
+            --broadcast \
+            -vvvv
+
+      - name: Apply canonical deployment addresses after successful smoke test
+        run: |
+          set -euo pipefail
+          node scripts/apply-deployment.mjs deployment-kub-testnet.json
+          node --input-type=module --check < src/protocol-config.js
+          git diff --check
+
+      - name: Commit canonical KUB Testnet registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No registry changes to commit."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/protocol-config.js config/kub-testnet.json
+            git commit -m "Record validated Maddeth KUB Testnet deployment"
+            git push origin HEAD:main
+          fi
 
       - name: Preserve deployment artifacts
         if: always()
