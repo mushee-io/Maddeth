@@ -10,7 +10,10 @@ on:
       - "scripts/**"
       - "src/**"
       - "config/**"
+      - "app/**"
+      - "docs/**"
       - "index.html"
+      - "vercel.json"
       - "foundry.toml"
       - ".github/workflows/contracts.yml"
       - ".github/workflows/deploy-kub-testnet.yml"
@@ -22,7 +25,10 @@ on:
       - "scripts/**"
       - "src/**"
       - "config/**"
+      - "app/**"
+      - "docs/**"
       - "index.html"
+      - "vercel.json"
       - "foundry.toml"
       - ".github/workflows/contracts.yml"
       - ".github/workflows/deploy-kub-testnet.yml"
@@ -34,12 +40,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check frontend and deployment integrity
+      - name: Check multipage frontend and deployment integrity
         run: |
           node --input-type=module --check < src/protocol-config.js
           node --input-type=module --check < src/protocol.js
-          node --input-type=module --check < src/app.js
-          node --input-type=module --check < src/ui.js
+          node --input-type=module --check < src/site.js
+          node --input-type=module --check < src/app-pages.js
           node --check scripts/apply-deployment.mjs
           node --check scripts/check-frontend.mjs
           node scripts/check-frontend.mjs

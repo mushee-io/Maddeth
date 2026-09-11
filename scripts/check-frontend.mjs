@@ -1,44 +1,64 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 
-const html = readFileSync('index.html', 'utf8');
-const css = readFileSync('src/styles.css', 'utf8');
-const ui = readFileSync('src/ui.js', 'utf8');
-
-const requiredIds = [
-  'appSection','viewTitle','liveMode','sandboxMode','liveNotice','sandboxNotice','txBanner',
-  'marketsView','borrowView','rwaView','portfolioView','protocolView','metricSupplied','metricLiquidity','metricMarkets','marketRows',
-  'refreshMarkets','mintUsdc','mintUsdt','supplyAsset','supplyAmount','walletBalance','borrowAsset','borrowAmount','borrowLiquidity',
-  'ltvValue','healthFactor','riskFill','riskMessage','previewBorrow','submitBorrow','accountCollateral','accountDebt','accountBorrowLimit',
-  'accountAvailable','accountHealth','repayAsset','repayAmount','repayMax','repayButton','withdrawAsset','withdrawAmount','withdrawMax','withdrawButton',
-  'rwaStatus','rwaAsset','rwaCap','rwaDeposits','rwaDebt','rwaMaturity','rwaAccess','rwaExplorer','rwaDepositAmount','rwaDepositButton','rwaWithdrawButton',
-  'portfolioDisconnected','portfolioLive','portfolioTitle','portfolioConnect','portfolioCollateral','portfolioDebt','portfolioAvailable','portfolioHealth',
-  'portfolioAddress','portfolioRows','refreshPortfolio','networkPill','connectWallet','deploymentLabel','contractStatus'
+const pages = [
+  'index.html',
+  'app/index.html',
+  'app/markets/index.html',
+  'app/markets/wtkub/index.html',
+  'app/markets/musdc/index.html',
+  'app/markets/musdt/index.html',
+  'app/borrow/index.html',
+  'app/rwa/index.html',
+  'app/portfolio/index.html',
+  'app/protocol/index.html',
+  'docs/index.html'
 ];
 
-const ids = [...html.matchAll(/\bid=["']([^"']+)["']/g)].map(match => match[1]);
-const idCounts = new Map();
-for (const id of ids) idCounts.set(id, (idCounts.get(id) || 0) + 1);
-
-const missing = requiredIds.filter(id => !idCounts.has(id));
-const duplicates = [...idCounts.entries()].filter(([, count]) => count > 1);
-
-if (missing.length) throw new Error(`Missing frontend IDs: ${missing.join(', ')}`);
-if (duplicates.length) throw new Error(`Duplicate frontend IDs: ${duplicates.map(([id, count]) => `${id}(${count})`).join(', ')}`);
-
-if (/spark\.finance/i.test(html) || /\bSpark\b/.test(html)) throw new Error('Spark branding/reference found in Maddeth frontend');
-if (/javascript\s*:/i.test(html)) throw new Error('javascript: URL found');
-if (!/Content-Security-Policy/.test(html)) throw new Error('Missing CSP meta policy');
-if (!/rpc-testnet\.bitkubchain\.io/.test(html)) throw new Error('KUB Testnet RPC missing');
-if (!/TESTNET HARDENED/.test(html) || !/audit pending/i.test(html)) throw new Error('Required testnet/audit disclosure missing');
-if (!/SANDBOX[\s\S]*simulated/i.test(html)) throw new Error('Sandbox disclosure missing');
-if (!/does not represent a legally enforceable real-world asset/i.test(html)) throw new Error('RWA demo disclaimer missing');
-if (!/prefers-reduced-motion/.test(css)) throw new Error('Reduced-motion support missing');
-if (!/noopener/.test(ui) || !/noreferrer/.test(ui)) throw new Error('External-link hardening missing');
-
-for (const match of html.matchAll(/<a\b[^>]*target=["']_blank["'][^>]*>/gi)) {
-  if (!/rel=["'][^"']*noopener[^"']*noreferrer[^"']*["']/i.test(match[0]) && !/rel=["'][^"']*noreferrer[^"']*noopener[^"']*["']/i.test(match[0])) {
-    throw new Error(`Unsafe target=_blank link: ${match[0]}`);
+for (const file of pages) {
+  if (!existsSync(file)) throw new Error(`Missing route file: ${file}`);
+  const html = readFileSync(file, 'utf8');
+  if (!/Content-Security-Policy/.test(html)) throw new Error(`Missing CSP: ${file}`);
+  if (/spark\.finance/i.test(html) || /\bSpark\b/.test(html)) throw new Error(`Spark branding/reference found: ${file}`);
+  if (/javascript\s*:/i.test(html)) throw new Error(`javascript: URL found: ${file}`);
+  const ids = [...html.matchAll(/\bid=["']([^"']+)["']/g)].map(m => m[1]);
+  const counts = new Map();
+  for (const id of ids) counts.set(id, (counts.get(id) || 0) + 1);
+  const dupes = [...counts].filter(([,n]) => n > 1);
+  if (dupes.length) throw new Error(`Duplicate IDs in ${file}: ${dupes.map(([id,n]) => `${id}(${n})`).join(', ')}`);
+  for (const match of html.matchAll(/<a\b[^>]*target=["']_blank["'][^>]*>/gi)) {
+    const tag = match[0];
+    if (!/rel=["'][^"']*noopener[^"']*["']/i.test(tag) || !/rel=["'][^"']*noreferrer[^"']*["']/i.test(tag)) throw new Error(`Unsafe target=_blank link in ${file}: ${tag}`);
   }
 }
 
-console.log(`Frontend integrity PASS · ${ids.length} unique IDs · Maddeth design system enforced`);
+const home = readFileSync('index.html','utf8');
+if (/id=["']appSection["']/.test(home) || /data-view=/.test(home)) throw new Error('Homepage still contains legacy one-page application navigation');
+if (!/href=["']\/app\/["']/.test(home)) throw new Error('Homepage must link to dedicated app dashboard');
+
+const requiredRoutes = {
+  'app/index.html': ['dashSupplied','dashBorrowed','dashLiquidity','dashMarkets','connectWallet','networkPill','liveMode','sandboxMode'],
+  'app/markets/index.html': ['metricSupplied','metricBorrowed','metricLiquidity','metricMarkets','marketRows','refreshMarkets','mintUsdc','mintUsdt'],
+  'app/borrow/index.html': ['supplyAsset','supplyAmount','borrowAsset','borrowAmount','borrowLiquidity','ltvValue','healthFactor','previewBorrow','submitBorrow','repayButton','withdrawButton'],
+  'app/rwa/index.html': ['rwaStatus','rwaCap','rwaDeposits','rwaDebt','rwaMaturity','rwaAccess','rwaDepositButton','rwaWithdrawButton'],
+  'app/portfolio/index.html': ['portfolioDisconnected','portfolioLive','portfolioTitle','portfolioConnect','portfolioRows','portfolioHealth'],
+  'app/protocol/index.html': ['deploymentLabel','contractStatus']
+};
+for (const [file, required] of Object.entries(requiredRoutes)) {
+  const html = readFileSync(file,'utf8');
+  const ids = new Set([...html.matchAll(/\bid=["']([^"']+)["']/g)].map(m => m[1]));
+  const missing = required.filter(id => !ids.has(id));
+  if (missing.length) throw new Error(`Missing required IDs in ${file}: ${missing.join(', ')}`);
+}
+for (const file of ['app/markets/wtkub/index.html','app/markets/musdc/index.html','app/markets/musdt/index.html']) {
+  const html = readFileSync(file,'utf8');
+  for (const id of ['marketDetailSymbol','marketDetailSupply','marketDetailBorrow','marketDetailUtilisation','marketDetailLiquidity']) if (!html.includes(`id="${id}"`)) throw new Error(`Missing ${id} in ${file}`);
+}
+const rwa = readFileSync('app/rwa/index.html','utf8');
+if (!/does not represent a legally enforceable real-world asset/i.test(rwa)) throw new Error('RWA legal/testnet disclaimer missing');
+const appCss = readFileSync('src/app-pages.css','utf8');
+if (!/prefers-reduced-motion/.test(appCss)) throw new Error('Reduced-motion support missing');
+const appJs = readFileSync('src/app-pages.js','utf8');
+if (!/deploymentReady/.test(appJs) || !/liveProtocolSnapshot/.test(appJs)) throw new Error('Live protocol integration missing from app-pages.js');
+if (!/state\.sandbox/.test(appJs)) throw new Error('Sandbox isolation missing from app-pages.js');
+if (!/noopener noreferrer/.test(appJs)) throw new Error('Dynamic external link hardening missing');
+console.log(`Frontend integrity PASS · ${pages.length} routes · multipage Maddeth application enforced`);
