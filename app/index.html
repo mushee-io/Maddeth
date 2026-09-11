@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f5f1eb" />
+  <meta name="referrer" content="no-referrer" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' https://rpc-testnet.bitkubchain.io; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; upgrade-insecure-requests" />
+  <meta name="description" content="Maddeth dashboard — KUB-native lending and isolated RWA credit on KUB Testnet." />
+  <title>Dashboard — Maddeth</title>
+  <link rel="stylesheet" href="/src/styles.css" />
+  <link rel="stylesheet" href="/src/app-pages.css" />
+</head>
+<body class="app-page" data-app-page="dashboard">
+  <div class="app-announcement">KUB TESTNET · CHAIN 25925 · TESTNET HARDENED · INDEPENDENT AUDIT PENDING</div>
+  <header class="app-topbar">
+    <a class="brand" href="/" aria-label="Maddeth home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span>Maddeth</span></a>
+    <nav class="app-nav" aria-label="Application">
+      <a href="/app/" data-app-nav="dashboard">Dashboard</a>
+      <a href="/app/markets/" data-app-nav="markets">Markets</a>
+      <a href="/app/borrow/" data-app-nav="borrow">Borrow</a>
+      <a href="/app/rwa/" data-app-nav="rwa">RWA</a>
+      <a href="/app/portfolio/" data-app-nav="portfolio">Portfolio</a>
+      <a href="/app/protocol/" data-app-nav="protocol">Protocol</a>
+      <a href="/docs/" data-app-nav="docs">Docs</a>
+    </nav>
+    <div class="app-actions">
+      <button id="networkPill" class="network-pill" type="button">Not connected</button>
+      <details class="settings-menu">
+        <summary aria-label="Settings">☰</summary>
+        <div class="settings-panel">
+          <div class="settings-head"><strong>Appearance</strong><span>KUB Testnet</span></div>
+          <div class="settings-block"><b>Theme</b><div class="settings-inline"><button id="themeLight" type="button">Light</button><button id="themeDark" type="button">Dark</button><button id="themeSystem" type="button">System</button></div></div>
+          <a href="https://testnet.kubscan.com" target="_blank" rel="noopener noreferrer">KUBScan ↗</a>
+          <a href="/docs/">Documentation</a>
+          <a href="/SECURITY.md" target="_blank" rel="noopener noreferrer">Security ↗</a>
+        </div>
+      </details>
+      <button id="connectWallet" class="primary-btn" type="button">Connect wallet</button>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <section class="app-page-head">
+      <div><div class="eyebrow">MADDETH APP · KUB TESTNET</div><h1>Dashboard</h1><p>Your entry point into Maddeth markets, borrowing, portfolio risk and isolated RWA credit.</p></div>
+      <div class="app-head-actions"><div class="mode-switch" role="group" aria-label="Data mode"><button id="liveMode" class="active" type="button">Live</button><button id="sandboxMode" type="button">Sandbox</button></div></div>
+    </section>
+    <div id="liveNotice" class="notice">Live mode reads only KUB Testnet RPC and configured Maddeth contracts. You can browse public market data without connecting a wallet.</div>
+    <div id="sandboxNotice" class="notice warning hidden">SANDBOX · simulated values only. Sandbox never submits blockchain transactions.</div>
+    <div id="txBanner" class="tx-banner hidden" aria-live="polite"></div>
+
+    <section class="app-grid-4">
+      <div class="app-stat"><small>TOTAL SUPPLIED</small><strong id="dashSupplied">—</strong><span>KUB Testnet markets</span></div>
+      <div class="app-stat"><small>TOTAL BORROWED</small><strong id="dashBorrowed">—</strong><span>Indexed debt</span></div>
+      <div class="app-stat"><small>AVAILABLE LIQUIDITY</small><strong id="dashLiquidity">—</strong><span>Borrowable test assets</span></div>
+      <div class="app-stat"><small>ACTIVE MARKETS</small><strong id="dashMarkets">0</strong><span>Configured on-chain</span></div>
+    </section>
+
+    <section class="dashboard-grid">
+      <div class="panel">
+        <div class="panel-head"><div><div class="eyebrow">MARKETS</div><h2>Credit markets</h2><p>Browse first. Connect only when you want to transact.</p></div><a class="secondary-btn" href="/app/markets/">All markets ↗</a></div>
+        <div id="dashboardMarketRows" class="dashboard-markets"></div>
+      </div>
+      <aside class="account-card">
+        <h3>Your account</h3>
+        <div><span>Collateral value</span><strong id="dashCollateral">—</strong></div>
+        <div><span>Debt</span><strong id="dashDebt">—</strong></div>
+        <div><span>Available to borrow</span><strong id="dashAvailable">—</strong></div>
+        <div><span>Health factor</span><strong id="dashHealth">—</strong></div>
+        <p>Connect a wallet to load account-specific positions. Public market data remains available without a wallet.</p>
+      </aside>
+    </section>
+
+    <section class="market-toolbar">
+      <div><div class="eyebrow">QUICK ACTIONS</div><h3>Move through Maddeth like an application.</h3><p>Markets, borrowing, RWA and portfolio each have a dedicated page.</p></div>
+      <div class="market-toolbar-actions"><a class="primary-btn" href="/app/borrow/">Borrow</a><a class="secondary-btn" href="/app/rwa/">RWA credit</a><a class="secondary-btn" href="/app/portfolio/">Portfolio</a></div>
+    </section>
+
+    <section class="security-note"><strong id="deploymentLabel">KUB Testnet</strong> · <span id="contractStatus">Checking deployment configuration…</span></section>
+  </main>
+<script type="module" src="/src/site.js"></script>
+  <script type="module" src="/src/app-pages.js"></script>
+</body>
+</html>
