@@ -34,6 +34,7 @@ contract IsolatedRwaVaultTest is TestBase {
         vm.prank(borrower);
         vault.borrow(200_000e6);
         assertEq(vault.totalDebt(), 200_000e6, "debt total");
+        assertEq(vault.principalOutstanding(), 200_000e6, "principal total");
     }
 
     function testDebtCapEnforced() public {
@@ -111,5 +112,38 @@ contract IsolatedRwaVaultTest is TestBase {
         vault.repay(100_000e6);
         assertTrue(!vault.defaulted(), "default not cured");
         assertEq(vault.totalDebt(), 0, "debt remains");
+    }
+
+    function testFixedAprAccruesToLenderShareValue() public {
+        vault.setFixedAprBps(1_200); // 12% annual fixed testnet term
+        vm.prank(lender);
+        vault.deposit(300_000e6);
+        vm.prank(borrower);
+        vault.borrow(120_000e6);
+
+        vm.warp(block.timestamp + 15 days);
+        uint256 debtWithInterest = vault.totalDebt();
+        assertGt(debtWithInterest, 120_000e6, "interest did not accrue");
+        assertGt(vault.deposits(lender), 300_000e6, "lender NAV did not increase");
+
+        vm.prank(borrower);
+        vault.repay(debtWithInterest);
+        assertEq(vault.totalDebt(), 0, "debt not fully repaid");
+        assertEq(vault.principalOutstanding(), 0, "principal not cleared");
+
+        uint256 claim = vault.deposits(lender);
+        assertGt(claim, 300_000e6, "yield not claimable");
+        uint256 before = usdc.balanceOf(lender);
+        vm.prank(lender);
+        vault.withdraw(claim);
+        assertGt(usdc.balanceOf(lender), before + 300_000e6, "yield not paid to lender");
+    }
+
+    function testAprTermsLockAfterFunding() public {
+        vault.setFixedAprBps(900);
+        vm.prank(lender);
+        vault.deposit(1_000e6);
+        vm.expectRevert(bytes("TERMS_LOCKED"));
+        vault.setFixedAprBps(1_000);
     }
 }
