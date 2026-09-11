@@ -6,6 +6,7 @@ import {MaddethLens} from "../contracts/MaddethLens.sol";
 import {InterestRateModel} from "../contracts/InterestRateModel.sol";
 import {BitkubOracleAdapter} from "../contracts/BitkubOracleAdapter.sol";
 import {RwaVaultFactory} from "../contracts/RwaVaultFactory.sol";
+import {IsolatedRwaVault} from "../contracts/IsolatedRwaVault.sol";
 import {MockERC20} from "../contracts/mocks/MockERC20.sol";
 import {WrappedTKUB} from "../contracts/mocks/WrappedTKUB.sol";
 
@@ -38,6 +39,7 @@ contract DeployKubTestnet {
 
     uint256 internal constant INITIAL_STABLE_LIQUIDITY = 1_000_000e6;
     uint256 internal constant DEMO_RWA_DEBT_CAP = 500_000e6;
+    uint16 internal constant DEMO_RWA_APR_BPS = 900;
 
     function run()
         external
@@ -136,6 +138,8 @@ contract DeployKubTestnet {
             DEMO_RWA_DEBT_CAP,
             "testnet-demo://maddeth/kub-invoice-credit-v1"
         );
+        IsolatedRwaVault(sampleRwaVault).setFixedAprBps(DEMO_RWA_APR_BPS);
+        IsolatedRwaVault(sampleRwaVault).setLender(deployer, true);
 
         VM.stopBroadcast();
 
