@@ -24,6 +24,16 @@ function encodeAddress(address) {
   return address.slice(2).toLowerCase().padStart(64, '0');
 }
 
+function encodeUint(value) {
+  const n = BigInt(value);
+  if (n < 0n) throw new Error('Negative uint');
+  return n.toString(16).padStart(64, '0');
+}
+
+function encodeBool(value) {
+  return value ? encodeUint(1n) : encodeUint(0n);
+}
+
 function decodeWords(data) {
   const body = String(data || '0x').slice(2);
   if (!body.length || body.length % 64 !== 0) throw new Error('Malformed contract response');
@@ -45,6 +55,31 @@ async function readNoArgUint(to, signature) {
 async function readAddressArgWords(to, signature, address) {
   const method = await selector(signature);
   return decodeWords(await ethCall(to, `${method}${encodeAddress(address)}`));
+}
+
+async function sendTransaction({ from, to, data, value = null }) {
+  if (!from) throw new Error('Connect a wallet first');
+  const chainHex = await provider().request({ method: 'eth_chainId' });
+  if (Number.parseInt(chainHex, 16) !== KUB_TESTNET.chainId) throw new Error('Switch to KUB Testnet first');
+  const tx = { from, to, data };
+  if (value !== null) tx.value = `0x${BigInt(value).toString(16)}`;
+
+  // Fail before opening a wallet confirmation if the transaction cannot execute against current state.
+  await provider().request({ method: 'eth_estimateGas', params: [tx] });
+  return provider().request({ method: 'eth_sendTransaction', params: [tx] });
+}
+
+export async function waitForReceipt(txHash, { timeoutMs = 120000, intervalMs = 1200 } = {}) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const receipt = await provider().request({ method: 'eth_getTransactionReceipt', params: [txHash] });
+    if (receipt) {
+      if (receipt.status === '0x0') throw new Error(`Transaction reverted: ${txHash}`);
+      return receipt;
+    }
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+  }
+  throw new Error(`Timed out waiting for transaction: ${txHash}`);
 }
 
 export async function ensureKubTestnet() {
@@ -111,18 +146,91 @@ export async function liveProtocolSnapshot(account = null) {
       address
     );
     const [price] = await readAddressArgWords(oracle, 'getPrice(address)', address);
-    assets.push({
-      ...asset,
-      address,
-      totalSupplied,
-      totalBorrowed,
-      utilisation,
-      reserves,
-      price
-    });
+    assets.push({ ...asset, address, totalSupplied, totalBorrowed, utilisation, reserves, price });
   }
 
   return { deployed: true, activeMarkets, accountHealthFactor, assets };
+}
+
+export function parseUnits(value, decimals = 18) {
+  const normalized = String(value ?? '').trim();
+  if (!/^\d+(\.\d+)?$/.test(normalized)) throw new Error('Enter a valid positive amount');
+  const [whole, fraction = ''] = normalized.split('.');
+  if (fraction.length > decimals) throw new Error(`Too many decimal places; maximum is ${decimals}`);
+  const base = 10n ** BigInt(decimals);
+  const amount = BigInt(whole) * base + BigInt((fraction + '0'.repeat(decimals)).slice(0, decimals) || '0');
+  if (amount <= 0n) throw new Error('Amount must be greater than zero');
+  return amount;
+}
+
+export async function wrapTKUB(account, amount) {
+  const wrapped = configuredContract('wrappedKUB');
+  if (!wrapped) throw new Error('WtKUB is not configured');
+  const data = await selector('deposit()');
+  return sendTransaction({ from: account, to: wrapped, data, value: amount });
+}
+
+export async function approvePool(account, asset, amount) {
+  const pool = configuredContract('maddethPool');
+  if (!pool) throw new Error('MaddethPool is not configured');
+  const method = await selector('approve(address,uint256)');
+  return sendTransaction({
+    from: account,
+    to: asset,
+    data: `${method}${encodeAddress(pool)}${encodeUint(amount)}`
+  });
+}
+
+export async function supplyToPool(account, asset, amount) {
+  const pool = configuredContract('maddethPool');
+  if (!pool) throw new Error('MaddethPool is not configured');
+  const method = await selector('supply(address,uint256)');
+  return sendTransaction({
+    from: account,
+    to: pool,
+    data: `${method}${encodeAddress(asset)}${encodeUint(amount)}`
+  });
+}
+
+export async function setCollateral(account, asset, enabled = true) {
+  const pool = configuredContract('maddethPool');
+  if (!pool) throw new Error('MaddethPool is not configured');
+  const method = await selector('setCollateral(address,bool)');
+  return sendTransaction({
+    from: account,
+    to: pool,
+    data: `${method}${encodeAddress(asset)}${encodeBool(enabled)}`
+  });
+}
+
+export async function borrowFromPool(account, asset, amount) {
+  const pool = configuredContract('maddethPool');
+  if (!pool) throw new Error('MaddethPool is not configured');
+  const method = await selector('borrow(address,uint256)');
+  return sendTransaction({
+    from: account,
+    to: pool,
+    data: `${method}${encodeAddress(asset)}${encodeUint(amount)}`
+  });
+}
+
+export async function repayPool(account, asset, amount) {
+  const pool = configuredContract('maddethPool');
+  if (!pool) throw new Error('MaddethPool is not configured');
+  const approvalHash = await approvePool(account, asset, amount);
+  await waitForReceipt(approvalHash);
+  const method = await selector('repay(address,uint256)');
+  return sendTransaction({
+    from: account,
+    to: pool,
+    data: `${method}${encodeAddress(asset)}${encodeUint(amount)}`
+  });
+}
+
+export function assetConfig(key) {
+  const metadata = MADDETH_DEPLOYMENT.assets.find(asset => asset.key === key);
+  const address = configuredContract(key);
+  return metadata && address ? { ...metadata, address } : null;
 }
 
 export function formatUnits(value, decimals = 18, precision = 4) {
@@ -137,6 +245,11 @@ export function formatUnits(value, decimals = 18, precision = 4) {
 export function deploymentExplorerUrl(address) {
   if (!address) return null;
   return `${KUB_TESTNET.blockExplorerUrls[0]}/address/${address}`;
+}
+
+export function transactionExplorerUrl(hash) {
+  if (!hash) return null;
+  return `${KUB_TESTNET.blockExplorerUrls[0]}/tx/${hash}`;
 }
 
 export { KUB_TESTNET, MADDETH_DEPLOYMENT, configuredContract, deploymentReady };
