@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {MaddethPool} from "../contracts/MaddethPool.sol";
+import {MaddethLens} from "../contracts/MaddethLens.sol";
 import {InterestRateModel} from "../contracts/InterestRateModel.sol";
 import {BitkubOracleAdapter} from "../contracts/BitkubOracleAdapter.sol";
 import {RwaVaultFactory} from "../contracts/RwaVaultFactory.sol";
@@ -15,25 +16,31 @@ interface VmDeploy {
     function stopBroadcast() external;
 }
 
-/// @notice Testnet-only deployment for chain id 25925.
-/// @dev Never commit PRIVATE_KEY. Run with KUB_TESTNET_RPC_URL + PRIVATE_KEY environment variables.
+/// @notice Complete testnet deployment for KUB Chain testnet (chain id 25925).
+/// @dev Never commit PRIVATE_KEY. Mock stablecoins and the sample RWA vault are TESTNET ONLY.
 contract DeployKubTestnet {
     VmDeploy internal constant VM = VmDeploy(address(uint160(uint256(keccak256("hevm cheat code")))));
 
-    // Bitkub/BKC Oracle KUB Testnet proxy addresses from the official oracle documentation.
+    // KUB Testnet oracle feed proxies currently configured for Maddeth.
+    // Re-confirm these against the KUB Developer Center immediately before each real broadcast.
     address internal constant KUB_USDT_FEED = 0x6Cc1316A9695E435875A5CDA6e60066114f8A395;
     address internal constant USDC_USDT_FEED = 0x6f1373EC8d0562be98a98FE46844f057284B7A61;
+
+    uint256 internal constant INITIAL_STABLE_LIQUIDITY = 1_000_000e6;
+    uint256 internal constant DEMO_RWA_DEBT_CAP = 500_000e6;
 
     function run()
         external
         returns (
             address poolAddress,
+            address lensAddress,
             address oracleAddress,
             address rateModelAddress,
             address wrappedKubAddress,
             address mockUsdcAddress,
             address mockUsdtAddress,
-            address rwaFactoryAddress
+            address rwaFactoryAddress,
+            address sampleRwaVaultAddress
         )
     {
         require(block.chainid == 25925, "NOT_KUB_TESTNET");
@@ -42,6 +49,7 @@ contract DeployKubTestnet {
 
         VM.startBroadcast(privateKey);
 
+        // TESTNET assets. They must never be reused or presented as production stablecoins.
         WrappedTKUB wrappedKub = new WrappedTKUB();
         MockERC20 mockUsdc = new MockERC20("Maddeth Test USDC", "mUSDC", 6);
         MockERC20 mockUsdt = new MockERC20("Maddeth Test USDT", "mUSDT", 6);
@@ -49,10 +57,12 @@ contract DeployKubTestnet {
         BitkubOracleAdapter oracle = new BitkubOracleAdapter(deployer);
         oracle.setFeed(address(wrappedKub), KUB_USDT_FEED, 30 minutes, true);
         oracle.setFeed(address(mockUsdc), USDC_USDT_FEED, 30 minutes, true);
+        // Explicit testnet convenience. Production stablecoin collateral requires a depeg-aware oracle policy.
         oracle.setUsdPeg(address(mockUsdt), true);
 
         InterestRateModel rateModel = new InterestRateModel(0.02e18, 0.08e18, 0.75e18, 0.80e18);
         MaddethPool pool = new MaddethPool(address(oracle));
+        MaddethLens lens = new MaddethLens(address(pool));
         RwaVaultFactory rwaFactory = new RwaVaultFactory();
 
         pool.configureMarket(
@@ -100,21 +110,35 @@ contract DeployKubTestnet {
             })
         );
 
-        // Demo liquidity assets only. These mocks are intentionally mintable and must never be treated as real stablecoins.
-        mockUsdc.mint(deployer, 2_000_000e6);
-        mockUsdt.mint(deployer, 2_000_000e6);
+        // Seed borrowable TESTNET liquidity so a fresh deployment is usable immediately.
+        mockUsdc.mint(deployer, INITIAL_STABLE_LIQUIDITY);
+        mockUsdt.mint(deployer, INITIAL_STABLE_LIQUIDITY);
+        mockUsdc.approve(address(pool), type(uint256).max);
+        mockUsdt.approve(address(pool), type(uint256).max);
+        pool.supply(address(mockUsdc), INITIAL_STABLE_LIQUIDITY);
+        pool.supply(address(mockUsdt), INITIAL_STABLE_LIQUIDITY);
+
+        // Register one explicitly labelled demo RWA vault. No production issuer or off-chain asset is implied.
         rwaFactory.setIssuer(deployer, true);
+        address sampleRwaVault = rwaFactory.createVault(
+            address(mockUsdc),
+            block.timestamp + 90 days,
+            DEMO_RWA_DEBT_CAP,
+            "testnet-demo://maddeth/kub-invoice-credit-v1"
+        );
 
         VM.stopBroadcast();
 
         return (
             address(pool),
+            address(lens),
             address(oracle),
             address(rateModel),
             address(wrappedKub),
             address(mockUsdc),
             address(mockUsdt),
-            address(rwaFactory)
+            address(rwaFactory),
+            sampleRwaVault
         );
     }
 }
