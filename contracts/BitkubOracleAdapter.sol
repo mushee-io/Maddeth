@@ -3,51 +3,54 @@ pragma solidity ^0.8.24;
 
 import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
 import {IAggregatorV3} from "./interfaces/IAggregatorV3.sol";
+import {Ownable2Step} from "./utils/Ownable2Step.sol";
 
 /// @title BitkubOracleAdapter
 /// @notice Normalizes Bitkub/BKC Oracle data-feed proxy prices to 1e18 USD precision.
 /// @dev The adapter itself must be allowlisted/subscribed as a consumer when Bitkub Oracle requires it.
-contract BitkubOracleAdapter is IPriceOracle {
+contract BitkubOracleAdapter is IPriceOracle, Ownable2Step {
     struct FeedConfig {
         address feed;
         uint32 heartbeat;
         bool enabled;
     }
 
-    address public owner;
+    struct PriceBounds {
+        uint128 minPrice;
+        uint128 maxPrice;
+    }
+
     mapping(address => FeedConfig) public feeds;
     mapping(address => bool) public usdPegged;
+    mapping(address => PriceBounds) public priceBounds;
 
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event FeedConfigured(address indexed asset, address indexed feed, uint32 heartbeat, bool enabled);
     event UsdPegConfigured(address indexed asset, bool enabled);
+    event PriceBoundsConfigured(address indexed asset, uint128 minPrice, uint128 maxPrice);
 
-    modifier onlyOwner() {
-        require(msg.sender == owner, "NOT_OWNER");
-        _;
-    }
-
-    constructor(address _owner) {
-        require(_owner != address(0), "ZERO_OWNER");
-        owner = _owner;
-        emit OwnershipTransferred(address(0), _owner);
-    }
-
-    function transferOwnership(address newOwner) external onlyOwner {
-        require(newOwner != address(0), "ZERO_OWNER");
-        emit OwnershipTransferred(owner, newOwner);
-        owner = newOwner;
-    }
+    constructor(address _owner) Ownable2Step(_owner) {}
 
     function setFeed(address asset, address feed, uint32 heartbeat, bool enabled) external onlyOwner {
         require(asset != address(0), "ZERO_ASSET");
-        require(feed != address(0), "ZERO_FEED");
+        require(feed != address(0) && feed.code.length > 0, "BAD_FEED");
         require(heartbeat > 0 && heartbeat <= 1 days, "BAD_HEARTBEAT");
         uint8 feedDecimals = IAggregatorV3(feed).decimals();
         require(feedDecimals <= 36, "BAD_DECIMALS");
         feeds[asset] = FeedConfig({feed: feed, heartbeat: heartbeat, enabled: enabled});
         if (enabled) usdPegged[asset] = false;
         emit FeedConfigured(asset, feed, heartbeat, enabled);
+    }
+
+    /// @notice Optional circuit-breaker bounds in normalized 1e18 USD units.
+    /// @dev Set both to zero to disable bounds. Bounds fail closed inside getPrice.
+    function setPriceBounds(address asset, uint128 minPrice, uint128 maxPrice) external onlyOwner {
+        require(asset != address(0), "ZERO_ASSET");
+        require(
+            (minPrice == 0 && maxPrice == 0) || (minPrice > 0 && maxPrice > minPrice),
+            "BAD_BOUNDS"
+        );
+        priceBounds[asset] = PriceBounds({minPrice: minPrice, maxPrice: maxPrice});
+        emit PriceBoundsConfigured(asset, minPrice, maxPrice);
     }
 
     /// @notice Testnet/explicit-risk convenience for assets intentionally treated as $1.
@@ -60,7 +63,11 @@ contract BitkubOracleAdapter is IPriceOracle {
     }
 
     function getPrice(address asset) external view returns (uint256 price, uint256 updatedAt) {
-        if (usdPegged[asset]) return (1e18, block.timestamp);
+        if (usdPegged[asset]) {
+            price = 1e18;
+            _enforceBounds(asset, price);
+            return (price, block.timestamp);
+        }
 
         FeedConfig memory cfg = feeds[asset];
         require(cfg.enabled && cfg.feed != address(0), "FEED_NOT_CONFIGURED");
@@ -73,6 +80,7 @@ contract BitkubOracleAdapter is IPriceOracle {
         require(block.timestamp - timestamp <= cfg.heartbeat, "FEED_STALE");
 
         uint8 decimals_ = aggregator.decimals();
+        require(decimals_ <= 36, "BAD_DECIMALS");
         uint256 unsignedAnswer = uint256(answer);
         if (decimals_ == 18) {
             price = unsignedAnswer;
@@ -82,6 +90,13 @@ contract BitkubOracleAdapter is IPriceOracle {
             price = unsignedAnswer / (10 ** (decimals_ - 18));
         }
         require(price > 0, "ZERO_PRICE");
+        _enforceBounds(asset, price);
         updatedAt = timestamp;
+    }
+
+    function _enforceBounds(address asset, uint256 price) internal view {
+        PriceBounds memory bounds = priceBounds[asset];
+        if (bounds.minPrice == 0 && bounds.maxPrice == 0) return;
+        require(price >= bounds.minPrice && price <= bounds.maxPrice, "PRICE_OUT_OF_BOUNDS");
     }
 }
