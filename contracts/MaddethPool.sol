@@ -39,6 +39,7 @@ contract MaddethPool {
     address public owner;
     address public riskAdmin;
     IPriceOracle public oracle;
+    bool public protocolPaused;
     bool private entered;
 
     mapping(address => MarketConfig) public markets;
@@ -51,6 +52,7 @@ contract MaddethPool {
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     event RiskAdminUpdated(address indexed newRiskAdmin);
     event OracleUpdated(address indexed newOracle);
+    event ProtocolPaused(bool paused);
     event MarketConfigured(address indexed asset, uint16 ltvBps, uint16 liquidationThresholdBps, uint16 reserveFactorBps, uint128 supplyCap, uint128 borrowCap, address rateModel);
     event MarketPaused(address indexed asset, bool paused);
     event InterestAccrued(address indexed asset, uint256 borrowIndex, uint256 supplyIndex, uint256 interestAccrued, uint256 reservesAccrued);
@@ -60,11 +62,25 @@ contract MaddethPool {
     event Repaid(address indexed user, address indexed asset, uint256 amount, uint256 shares);
     event CollateralToggled(address indexed user, address indexed asset, bool enabled);
     event Liquidated(address indexed user, address indexed debtAsset, address indexed collateralAsset, uint256 repaid, uint256 seized);
+    event BadDebtAbsorbed(address indexed user, address indexed debtAsset, uint256 debtWrittenOff, uint256 reserveCover, uint256 supplierLoss);
     event ReservesWithdrawn(address indexed asset, address indexed to, uint256 amount);
 
-    modifier onlyOwner() { require(msg.sender == owner, "NOT_OWNER"); _; }
-    modifier onlyRisk() { require(msg.sender == owner || msg.sender == riskAdmin, "NOT_RISK_ADMIN"); _; }
-    modifier nonReentrant() { require(!entered, "REENTRANCY"); entered = true; _; entered = false; }
+    modifier onlyOwner() {
+        require(msg.sender == owner, "NOT_OWNER");
+        _;
+    }
+
+    modifier onlyRisk() {
+        require(msg.sender == owner || msg.sender == riskAdmin, "NOT_RISK_ADMIN");
+        _;
+    }
+
+    modifier nonReentrant() {
+        require(!entered, "REENTRANCY");
+        entered = true;
+        _;
+        entered = false;
+    }
 
     constructor(address _oracle) {
         require(_oracle != address(0), "ZERO_ORACLE");
@@ -92,6 +108,11 @@ contract MaddethPool {
         require(newOracle != address(0), "ZERO_ORACLE");
         oracle = IPriceOracle(newOracle);
         emit OracleUpdated(newOracle);
+    }
+
+    function setProtocolPaused(bool paused) external onlyRisk {
+        protocolPaused = paused;
+        emit ProtocolPaused(paused);
     }
 
     function configureMarket(address asset, MarketConfig calldata cfg) external onlyRisk {
@@ -123,7 +144,9 @@ contract MaddethPool {
         emit MarketPaused(asset, paused);
     }
 
-    function marketCount() external view returns (uint256) { return listedAssets.length; }
+    function marketCount() external view returns (uint256) {
+        return listedAssets.length;
+    }
 
     function accrue(address asset) external {
         require(markets[asset].listed, "UNLISTED");
@@ -162,7 +185,7 @@ contract MaddethPool {
     }
 
     function borrowed(address user, address asset) public view returns (uint256) {
-        (,uint256 index) = currentIndexes(asset);
+        (, uint256 index) = currentIndexes(asset);
         return borrowShares[user][asset] * index / WAD;
     }
 
@@ -170,7 +193,11 @@ contract MaddethPool {
         return (supplyShares[user][asset], borrowShares[user][asset]);
     }
 
-    function marketTotals(address asset) public view returns (uint256 totalSupplied, uint256 totalBorrowed, uint256 utilisation, uint256 reserves) {
+    function marketTotals(address asset)
+        public
+        view
+        returns (uint256 totalSupplied, uint256 totalBorrowed, uint256 utilisation, uint256 reserves)
+    {
         MarketState storage s = marketStates[asset];
         (uint256 si, uint256 bi) = currentIndexes(asset);
         totalSupplied = s.totalSupplyShares * si / WAD;
@@ -188,7 +215,7 @@ contract MaddethPool {
 
     function supply(address asset, uint256 amount) external nonReentrant {
         MarketConfig storage m = markets[asset];
-        require(m.listed && !m.paused, "MARKET_UNAVAILABLE");
+        require(!protocolPaused && m.listed && !m.paused, "MARKET_UNAVAILABLE");
         require(amount > 0, "ZERO_AMOUNT");
         _accrue(asset);
         MarketState storage s = marketStates[asset];
@@ -231,7 +258,7 @@ contract MaddethPool {
 
     function borrow(address asset, uint256 amount) external nonReentrant {
         MarketConfig storage m = markets[asset];
-        require(m.listed && !m.paused, "MARKET_UNAVAILABLE");
+        require(!protocolPaused && m.listed && !m.paused, "MARKET_UNAVAILABLE");
         require(amount > 0, "ZERO_AMOUNT");
         _accrue(asset);
         MarketState storage s = marketStates[asset];
@@ -248,47 +275,30 @@ contract MaddethPool {
     }
 
     function repay(address asset, uint256 amount) external nonReentrant returns (uint256 paid) {
-        require(markets[asset].listed, "UNLISTED");
-        require(amount > 0, "ZERO_AMOUNT");
-        _accrue(asset);
-        MarketState storage s = marketStates[asset];
-        uint256 userShares = borrowShares[msg.sender][asset];
-        require(userShares > 0, "NO_DEBT");
-        uint256 debt = userShares * s.borrowIndex / WAD;
-        paid = amount >= debt ? debt : amount;
+        return _repayFor(msg.sender, msg.sender, asset, amount);
+    }
 
-        uint256 sharesToBurn = paid == debt ? userShares : paid * WAD / s.borrowIndex;
-        require(sharesToBurn > 0, "ZERO_SHARES");
-        _safeTransferFrom(asset, msg.sender, address(this), paid);
-        borrowShares[msg.sender][asset] = userShares - sharesToBurn;
-        s.totalBorrowShares -= sharesToBurn;
-        emit Repaid(msg.sender, asset, paid, sharesToBurn);
+    function repayFor(address user, address asset, uint256 amount) external nonReentrant returns (uint256 paid) {
+        require(user != address(0), "ZERO_USER");
+        return _repayFor(msg.sender, user, asset, amount);
     }
 
     function liquidate(address user, address debtAsset, address collateralAsset, uint256 repayAmount) external nonReentrant {
         require(markets[debtAsset].listed && markets[collateralAsset].listed, "UNLISTED");
+        require(repayAmount > 0, "ZERO_AMOUNT");
         _accrue(debtAsset);
         if (collateralAsset != debtAsset) _accrue(collateralAsset);
         require(!_accountHealthy(user), "ACCOUNT_HEALTHY");
         require(collateralEnabled[user][collateralAsset], "NOT_COLLATERAL");
-        require(repayAmount > 0, "ZERO_AMOUNT");
 
         MarketState storage debtS = marketStates[debtAsset];
         MarketState storage colS = marketStates[collateralAsset];
         uint256 userDebtShares = borrowShares[user][debtAsset];
         uint256 debt = userDebtShares * debtS.borrowIndex / WAD;
         require(debt > 0, "NO_DEBT");
-        uint256 maxClose = debt * CLOSE_FACTOR_BPS / BPS;
-        if (maxClose == 0) maxClose = debt;
-        uint256 paid = repayAmount > maxClose ? maxClose : repayAmount;
 
-        (uint256 debtPrice,) = _validPrice(debtAsset);
-        (uint256 colPrice,) = _validPrice(collateralAsset);
-        uint8 debtDec = IERC20Minimal(debtAsset).decimals();
-        uint8 colDec = IERC20Minimal(collateralAsset).decimals();
-        uint256 debtUsd = paid * debtPrice / (10 ** debtDec);
-        uint256 seizeUsd = debtUsd * (BPS + markets[collateralAsset].liquidationBonusBps) / BPS;
-        uint256 seize = seizeUsd * (10 ** colDec) / colPrice;
+        uint256 paid = _cappedLiquidationRepay(user, debtAsset, collateralAsset, repayAmount, debt);
+        uint256 seize = _seizeForRepay(debtAsset, collateralAsset, paid);
         uint256 availableCollateral = supplyShares[user][collateralAsset] * colS.supplyIndex / WAD;
         if (seize > availableCollateral) seize = availableCollateral;
         require(seize > 0, "NO_COLLATERAL");
@@ -296,7 +306,9 @@ contract MaddethPool {
         uint256 debtSharesToBurn = paid >= debt ? userDebtShares : paid * WAD / debtS.borrowIndex;
         require(debtSharesToBurn > 0, "ZERO_DEBT_SHARES");
         uint256 colSharesToBurn = _divUp(seize * WAD, colS.supplyIndex);
-        if (colSharesToBurn > supplyShares[user][collateralAsset]) colSharesToBurn = supplyShares[user][collateralAsset];
+        if (colSharesToBurn > supplyShares[user][collateralAsset]) {
+            colSharesToBurn = supplyShares[user][collateralAsset];
+        }
 
         _safeTransferFrom(debtAsset, msg.sender, address(this), paid);
         borrowShares[user][debtAsset] -= debtSharesToBurn;
@@ -307,7 +319,38 @@ contract MaddethPool {
         emit Liquidated(user, debtAsset, collateralAsset, paid, seize);
     }
 
-    function withdrawReserves(address asset, address to, uint256 amount) external onlyOwner nonReentrant {
+    /// @notice Writes off unrecoverable debt only after all enabled collateral has been exhausted.
+    /// @dev Reserves absorb losses first. Any remainder is socialized to suppliers via the supply index.
+    function absorbBadDebt(address user, address debtAsset) external nonReentrant onlyRisk {
+        require(markets[debtAsset].listed, "UNLISTED");
+        _accrue(debtAsset);
+        require(!_accountHealthy(user), "ACCOUNT_HEALTHY");
+        (uint256 collateralUsd,,,) = getAccountLiquidity(user);
+        require(collateralUsd == 0, "COLLATERAL_REMAINS");
+
+        MarketState storage s = marketStates[debtAsset];
+        uint256 userShares = borrowShares[user][debtAsset];
+        require(userShares > 0, "NO_DEBT");
+        uint256 debt = userShares * s.borrowIndex / WAD;
+
+        uint256 reserveCover = debt > s.accruedReserves ? s.accruedReserves : debt;
+        uint256 supplierLoss = debt - reserveCover;
+        if (supplierLoss > 0) {
+            require(s.totalSupplyShares > 0, "NO_SUPPLIERS");
+            uint256 totalSupplied = s.totalSupplyShares * s.supplyIndex / WAD;
+            require(supplierLoss < totalSupplied, "MARKET_INSOLVENT");
+            uint256 lossPerShare = _divUp(supplierLoss * WAD, s.totalSupplyShares);
+            require(lossPerShare < s.supplyIndex, "MARKET_INSOLVENT");
+            s.supplyIndex -= lossPerShare;
+        }
+
+        s.accruedReserves -= reserveCover;
+        borrowShares[user][debtAsset] = 0;
+        s.totalBorrowShares -= userShares;
+        emit BadDebtAbsorbed(user, debtAsset, debt, reserveCover, supplierLoss);
+    }
+
+    function withdrawReserves(address asset, address to, uint256 amount) external nonReentrant onlyOwner {
         require(to != address(0), "ZERO_TO");
         _accrue(asset);
         MarketState storage s = marketStates[asset];
@@ -321,12 +364,11 @@ contract MaddethPool {
         emit ReservesWithdrawn(asset, to, amount);
     }
 
-    function getAccountLiquidity(address user) public view returns (
-        uint256 collateralUsd,
-        uint256 borrowLimitUsd,
-        uint256 liquidationLimitUsd,
-        uint256 debtUsd
-    ) {
+    function getAccountLiquidity(address user)
+        public
+        view
+        returns (uint256 collateralUsd, uint256 borrowLimitUsd, uint256 liquidationLimitUsd, uint256 debtUsd)
+    {
         uint256 len = listedAssets.length;
         for (uint256 i; i < len; ++i) {
             address asset = listedAssets[i];
@@ -344,9 +386,62 @@ contract MaddethPool {
     }
 
     function healthFactor(address user) external view returns (uint256) {
-        (, , uint256 liquidationLimitUsd, uint256 debtUsd) = getAccountLiquidity(user);
+        (,, uint256 liquidationLimitUsd, uint256 debtUsd) = getAccountLiquidity(user);
         if (debtUsd == 0) return type(uint256).max;
         return liquidationLimitUsd * WAD / debtUsd;
+    }
+
+    function _repayFor(address payer, address user, address asset, uint256 amount) internal returns (uint256 paid) {
+        require(markets[asset].listed, "UNLISTED");
+        require(amount > 0, "ZERO_AMOUNT");
+        _accrue(asset);
+        MarketState storage s = marketStates[asset];
+        uint256 userShares = borrowShares[user][asset];
+        require(userShares > 0, "NO_DEBT");
+        uint256 debt = userShares * s.borrowIndex / WAD;
+        paid = amount >= debt ? debt : amount;
+
+        uint256 sharesToBurn = paid == debt ? userShares : paid * WAD / s.borrowIndex;
+        require(sharesToBurn > 0, "ZERO_SHARES");
+        _safeTransferFrom(asset, payer, address(this), paid);
+        borrowShares[user][asset] = userShares - sharesToBurn;
+        s.totalBorrowShares -= sharesToBurn;
+        emit Repaid(user, asset, paid, sharesToBurn);
+    }
+
+    function _cappedLiquidationRepay(
+        address user,
+        address debtAsset,
+        address collateralAsset,
+        uint256 requested,
+        uint256 debt
+    ) internal view returns (uint256 paid) {
+        uint256 maxClose = debt * CLOSE_FACTOR_BPS / BPS;
+        if (maxClose == 0) maxClose = debt;
+        paid = requested > maxClose ? maxClose : requested;
+
+        uint256 availableCollateral = supplied(user, collateralAsset);
+        require(availableCollateral > 0, "NO_COLLATERAL");
+        (uint256 debtPrice,) = _validPrice(debtAsset);
+        (uint256 colPrice,) = _validPrice(collateralAsset);
+        uint8 debtDec = IERC20Minimal(debtAsset).decimals();
+        uint8 colDec = IERC20Minimal(collateralAsset).decimals();
+
+        uint256 collateralUsd = availableCollateral * colPrice / (10 ** colDec);
+        uint256 maxRepayUsd = collateralUsd * BPS / (BPS + markets[collateralAsset].liquidationBonusBps);
+        uint256 maxRepayByCollateral = maxRepayUsd * (10 ** debtDec) / debtPrice;
+        if (paid > maxRepayByCollateral) paid = maxRepayByCollateral;
+        require(paid > 0, "COLLATERAL_DUST");
+    }
+
+    function _seizeForRepay(address debtAsset, address collateralAsset, uint256 paid) internal view returns (uint256 seize) {
+        (uint256 debtPrice,) = _validPrice(debtAsset);
+        (uint256 colPrice,) = _validPrice(collateralAsset);
+        uint8 debtDec = IERC20Minimal(debtAsset).decimals();
+        uint8 colDec = IERC20Minimal(collateralAsset).decimals();
+        uint256 debtUsd = paid * debtPrice / (10 ** debtDec);
+        uint256 seizeUsd = debtUsd * (BPS + markets[collateralAsset].liquidationBonusBps) / BPS;
+        seize = seizeUsd * (10 ** colDec) / colPrice;
     }
 
     function _accrue(address asset) internal {
@@ -370,19 +465,21 @@ contract MaddethPool {
         uint256 supplierInterest = interest - reserveInterest;
 
         s.borrowIndex = s.borrowIndex + (s.borrowIndex * factor / WAD);
-        if (supplierInterest > 0) s.supplyIndex = s.supplyIndex + (supplierInterest * WAD / s.totalSupplyShares);
+        if (supplierInterest > 0) {
+            s.supplyIndex = s.supplyIndex + (supplierInterest * WAD / s.totalSupplyShares);
+        }
         s.accruedReserves += reserveInterest;
         s.lastAccrual = block.timestamp;
         emit InterestAccrued(asset, s.borrowIndex, s.supplyIndex, interest, reserveInterest);
     }
 
     function _withinBorrowLimit(address user) internal view returns (bool) {
-        (, uint256 borrowLimitUsd, , uint256 debtUsd) = getAccountLiquidity(user);
+        (, uint256 borrowLimitUsd,, uint256 debtUsd) = getAccountLiquidity(user);
         return debtUsd <= borrowLimitUsd;
     }
 
     function _accountHealthy(address user) internal view returns (bool) {
-        (, , uint256 liquidationLimitUsd, uint256 debtUsd) = getAccountLiquidity(user);
+        (,, uint256 liquidationLimitUsd, uint256 debtUsd) = getAccountLiquidity(user);
         return debtUsd == 0 || debtUsd <= liquidationLimitUsd;
     }
 
