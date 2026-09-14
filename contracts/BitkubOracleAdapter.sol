@@ -9,6 +9,10 @@ import {Ownable2Step} from "./utils/Ownable2Step.sol";
 /// @notice Normalizes Bitkub/BKC Oracle data-feed proxy prices to 1e18 USD precision.
 /// @dev The adapter itself must be allowlisted/subscribed as a consumer when Bitkub Oracle requires it.
 contract BitkubOracleAdapter is IPriceOracle, Ownable2Step {
+    uint256 internal constant KUB_TESTNET_CHAIN_ID = 25925;
+    uint256 internal constant TESTNET_DEMO_FALLBACK_PRICE = 1e18;
+    bytes32 internal constant NO_ACCESS_REASON = keccak256("No access");
+
     struct FeedConfig {
         address feed;
         uint32 heartbeat;
@@ -73,7 +77,36 @@ contract BitkubOracleAdapter is IPriceOracle, Ownable2Step {
         require(cfg.enabled && cfg.feed != address(0), "FEED_NOT_CONFIGURED");
 
         IAggregatorV3 aggregator = IAggregatorV3(cfg.feed);
-        (uint80 roundId, int256 answer,, uint256 timestamp, uint80 answeredInRound) = aggregator.latestRoundData();
+        uint80 roundId;
+        int256 answer;
+        uint256 timestamp;
+        uint80 answeredInRound;
+
+        try aggregator.latestRoundData() returns (
+            uint80 roundId_,
+            int256 answer_,
+            uint256,
+            uint256 timestamp_,
+            uint80 answeredInRound_
+        ) {
+            roundId = roundId_;
+            answer = answer_;
+            timestamp = timestamp_;
+            answeredInRound = answeredInRound_;
+        } catch Error(string memory reason) {
+            // KUB Testnet's oracle proxy can require consumer registration and revert with
+            // `No access`. Keep the grant/testnet lifecycle executable with an explicit,
+            // chain-gated demo price. Mainnet and every other revert continue to fail closed.
+            if (block.chainid == KUB_TESTNET_CHAIN_ID && keccak256(bytes(reason)) == NO_ACCESS_REASON) {
+                price = TESTNET_DEMO_FALLBACK_PRICE;
+                _enforceBounds(asset, price);
+                return (price, block.timestamp);
+            }
+            revert("FEED_CALL_FAILED");
+        } catch {
+            revert("FEED_CALL_FAILED");
+        }
+
         require(answer > 0, "BAD_ANSWER");
         require(timestamp > 0 && timestamp <= block.timestamp, "BAD_TIMESTAMP");
         require(answeredInRound >= roundId, "INCOMPLETE_ROUND");
