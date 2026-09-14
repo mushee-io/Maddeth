@@ -12,6 +12,7 @@ const pages = [
   'app/rwa/index.html',
   'app/portfolio/index.html',
   'app/protocol/index.html',
+  'app/readiness/index.html',
   'docs/index.html'
 ];
 
@@ -48,6 +49,9 @@ const requiredRoutes = {
   'app/portfolio/index.html': ['portfolioDisconnected','portfolioLive','portfolioTitle','portfolioConnect','portfolioRows','portfolioHealth'],
   'app/protocol/index.html': [
     'deploymentLabel','contractStatus','riskConsoleTitle','riskActionBanner','riskConnectedWallet','riskRole','riskNetwork','riskOwner','riskPendingOwner','riskAdminAddress','riskOracle','riskProtocolPause','riskMarketCount','riskAlertCount','riskEmergencyStatus','riskMarketsBody','riskMarketSelect','riskConnect','riskNetworkButton','riskRefresh','riskPauseProtocol','riskUnpauseProtocol','riskPauseMarket','riskUnpauseMarket'
+  ],
+  'app/readiness/index.html': [
+    'readinessRefreshTop','readinessVerdict','readinessVerdictDetail','readinessBanner','readyDeployment','readyMarkets','readyOracle','readyProtocol','readyRwa','readyBlock','readinessEvidence','readinessMarkets','readinessExternal'
   ]
 };
 for (const [file, required] of Object.entries(requiredRoutes)) {
@@ -81,6 +85,7 @@ if (!/eth_estimateGas/.test(labInlineJs)) throw new Error('Embedded lab must fai
 if (!/account\.toLowerCase\(\) === borrower\.toLowerCase\(\)/.test(labInlineJs)) throw new Error('Embedded lab two-wallet guard missing');
 const siteJs = readFileSync('src/site.js','utf8');
 if (!/\/app\/liquidations\/#liquidation-lab/.test(siteJs)) throw new Error('Lab navigation must remain inside the Liquidations page');
+if (!/\/app\/readiness\//.test(siteJs)) throw new Error('Readiness navigation missing from shared app nav');
 const riskJs = readFileSync('src/risk-admin.js','utf8');
 if (!/setProtocolPaused\(bool\)/.test(riskJs)) throw new Error('Risk console protocol pause path missing');
 if (!/setPaused\(address,bool\)/.test(riskJs)) throw new Error('Risk console market pause path missing');
@@ -88,4 +93,9 @@ if (!/MAX_ORACLE_AGE\(\)/.test(riskJs)) throw new Error('Risk console oracle fre
 if (!/marketTotals\(address\)/.test(riskJs) || !/markets\(address\)/.test(riskJs)) throw new Error('Risk console live market telemetry missing');
 if (!/eth_estimateGas/.test(riskJs)) throw new Error('Risk console actions must fail closed through gas estimation');
 if (/configureMarket\(address/.test(riskJs) || /withdrawReserves\(/.test(riskJs) || /absorbBadDebt\(/.test(riskJs) || /setOracle\(/.test(riskJs)) throw new Error('Risk browser console exposes destructive owner configuration');
-console.log(`Frontend integrity PASS · ${pages.length} routes · Phase 3 risk console enforced`);
+const readinessJs = readFileSync('src/readiness.js','utf8');
+if (!/eth_getCode/.test(readinessJs)) throw new Error('Readiness dashboard bytecode verification missing');
+if (!/priceUpdatedAt/.test(readinessJs)) throw new Error('Readiness dashboard oracle freshness check missing');
+if (!/externalGates/.test(readinessJs)) throw new Error('Readiness dashboard external gate rendering missing');
+if (!/TESTNET READY/.test(readinessJs)) throw new Error('Readiness dashboard verdict missing');
+console.log(`Frontend integrity PASS · ${pages.length} routes · Phase 4 final readiness enforced`);
