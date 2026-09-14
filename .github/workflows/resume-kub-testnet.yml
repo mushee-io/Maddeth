@@ -1,0 +1,200 @@
+name: Resume KUB Testnet Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type RESUME-KUB-TESTNET to resume the timed-out deployment without redeploying from scratch"
+        required: true
+        type: string
+
+concurrency:
+  group: maddeth-kub-testnet-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  resume:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: kub-testnet
+    env:
+      KUB_TESTNET_RPC_URL: https://rpc-testnet.bitkubchain.io
+      PRIVATE_KEY: ${{ secrets.KUB_TESTNET_PRIVATE_KEY }}
+      SOURCE_RUN_ID: "34818800131"
+      SOURCE_ARTIFACT: kub-testnet-deployment-34818800131
+    steps:
+      - name: Require explicit confirmation
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.confirm }}" != "RESUME-KUB-TESTNET" ]; then
+            echo "Resume confirmation did not match."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Restore timed-out broadcast journal
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .resume-source broadcast/DeployKubTestnet.s.sol/25925
+          mkdir -p .resume-source
+          gh run download "$SOURCE_RUN_ID" --repo "${{ github.repository }}" --name "$SOURCE_ARTIFACT" --dir .resume-source
+          test -s .resume-source/broadcast/DeployKubTestnet.s.sol/25925/run-latest.json
+          test -s .resume-source/deployment-kub-testnet.json
+          mkdir -p broadcast/DeployKubTestnet.s.sol/25925
+          cp .resume-source/broadcast/DeployKubTestnet.s.sol/25925/run-*.json broadcast/DeployKubTestnet.s.sol/25925/
+          cp .resume-source/deployment-kub-testnet.json deployment-kub-testnet.json
+
+      - name: Verify signer, chain and exact resume nonce
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$PRIVATE_KEY" ]; then
+            echo "Missing KUB_TESTNET_PRIVATE_KEY environment secret."
+            exit 1
+          fi
+          CHAIN_ID=$(cast chain-id --rpc-url "$KUB_TESTNET_RPC_URL")
+          [ "$CHAIN_ID" = "25925" ] || { echo "Wrong chain: $CHAIN_ID"; exit 1; }
+          DEPLOYER=$(cast wallet address --private-key "$PRIVATE_KEY")
+          EXPECTED_DEPLOYER=$(node -p "JSON.parse(require('fs').readFileSync('deployment-kub-testnet.json','utf8')).deployer")
+          if [ "${DEPLOYER,,}" != "${EXPECTED_DEPLOYER,,}" ]; then
+            echo "Signer does not match original deployment owner."
+            exit 1
+          fi
+
+          LATEST_NONCE=$(cast nonce "$DEPLOYER" --rpc-url "$KUB_TESTNET_RPC_URL")
+          FIRST_MISSING=$(python3 - <<'PY'
+import json, subprocess
+p='broadcast/DeployKubTestnet.s.sol/25925/run-latest.json'
+d=json.load(open(p))
+for tx in sorted(d['transactions'], key=lambda x: int(x['transaction']['nonce'],16)):
+    h=tx.get('hash')
+    if not h:
+        print(int(tx['transaction']['nonce'],16)); break
+    out=subprocess.run(['cast','rpc','--rpc-url','https://rpc-testnet.bitkubchain.io','eth_getTransactionReceipt',h],capture_output=True,text=True).stdout.strip()
+    if out == 'null' or out == '':
+        print(int(tx['transaction']['nonce'],16)); break
+PY
+          )
+          echo "Latest confirmed nonce: $LATEST_NONCE"
+          echo "First unresolved deployment nonce: $FIRST_MISSING"
+          if [ -z "$FIRST_MISSING" ]; then
+            echo "No unresolved deployment transaction remains; skipping resume is safer."
+            exit 1
+          fi
+          if [ "$LATEST_NONCE" != "$FIRST_MISSING" ]; then
+            echo "Fail closed: account nonce no longer matches the first unresolved deployment nonce."
+            echo "Run Inspect KUB Testnet Deployment again before any write."
+            exit 1
+          fi
+
+      - name: Resolve KUB legacy gas price
+        shell: bash
+        run: |
+          set -euo pipefail
+          GAS_PRICE_WEI=$(cast gas-price --rpc-url "$KUB_TESTNET_RPC_URL")
+          if ! [[ "$GAS_PRICE_WEI" =~ ^[0-9]+$ ]] || [ "$GAS_PRICE_WEI" -le 0 ]; then
+            echo "Invalid KUB legacy gas price: $GAS_PRICE_WEI"
+            exit 1
+          fi
+          echo "KUB_LEGACY_GAS_PRICE=$GAS_PRICE_WEI" >> "$GITHUB_ENV"
+
+      - name: Resume timed-out deployment journal
+        shell: bash
+        run: |
+          set -euo pipefail
+          forge script script/DeployKubTestnet.s.sol:DeployKubTestnet \
+            --rpc-url "$KUB_TESTNET_RPC_URL" \
+            --resume \
+            --legacy \
+            --gas-price "$KUB_LEGACY_GAS_PRICE" \
+            --slow \
+            -vvvv
+
+      - name: Load completed deployment manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/export-deployment-env.mjs deployment-kub-testnet.json "$GITHUB_ENV"
+
+      - name: Verify all recovered contract bytecode
+        shell: bash
+        run: |
+          set -euo pipefail
+          for ADDRESS in "$MADDETH_POOL" "$MADDETH_LENS" "$ORACLE" "$INTEREST_RATE_MODEL" "$RWA_FACTORY" "$SAMPLE_RWA" "$WRAPPED_KUB" "$TEST_USDC" "$TEST_USDT"; do
+            if ! [[ "$ADDRESS" =~ ^0x[0-9a-fA-F]{40}$ ]]; then
+              echo "Invalid address: $ADDRESS"
+              exit 1
+            fi
+            CODE=$(cast code "$ADDRESS" --rpc-url "$KUB_TESTNET_RPC_URL")
+            if [ "$CODE" = "0x" ]; then
+              echo "No bytecode at $ADDRESS"
+              exit 1
+            fi
+          done
+          echo "All resumed deployment bytecode checks passed."
+
+      - name: End-to-end KUB Testnet lending smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          forge script script/SmokeKubTestnet.s.sol:SmokeKubTestnet \
+            --rpc-url "$KUB_TESTNET_RPC_URL" \
+            --broadcast \
+            --legacy \
+            --gas-price "$KUB_LEGACY_GAS_PRICE" \
+            --slow \
+            -vvvv
+
+      - name: Apply canonical recovered deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/apply-deployment.mjs deployment-kub-testnet.json
+          node --input-type=module --check < src/protocol-config.js
+          node scripts/check-frontend.mjs
+          git diff --check
+
+      - name: Commit validated KUB Testnet registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No registry changes to commit."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/protocol-config.js config/kub-testnet.json
+            git commit -m "Record resumed Maddeth KUB Testnet deployment"
+            git push origin HEAD:main
+          fi
+
+      - name: Preserve resume evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: kub-testnet-resume-${{ github.run_id }}
+          path: |
+            deployment-kub-testnet.json
+            broadcast/DeployKubTestnet.s.sol/25925/run-latest.json
+            broadcast/DeployKubTestnet.s.sol/25925/run-*.json
+            broadcast/SmokeKubTestnet.s.sol/25925/run-latest.json
+            broadcast/SmokeKubTestnet.s.sol/25925/run-*.json
+          if-no-files-found: warn
+          retention-days: 30
