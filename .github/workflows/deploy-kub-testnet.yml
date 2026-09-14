@@ -67,6 +67,18 @@ jobs:
             exit 1
           fi
 
+      - name: Resolve KUB legacy gas price
+        shell: bash
+        run: |
+          set -euo pipefail
+          GAS_PRICE_WEI=$(cast gas-price --rpc-url "$KUB_TESTNET_RPC_URL")
+          if ! [[ "$GAS_PRICE_WEI" =~ ^[0-9]+$ ]] || [ "$GAS_PRICE_WEI" -le 0 ]; then
+            echo "Invalid legacy gas price returned by KUB Testnet RPC: $GAS_PRICE_WEI"
+            exit 1
+          fi
+          echo "KUB_LEGACY_GAS_PRICE=$GAS_PRICE_WEI" >> "$GITHUB_ENV"
+          echo "KUB legacy gas price: $GAS_PRICE_WEI wei"
+
       - name: Require clean source tree
         run: git diff --exit-code
 
@@ -92,6 +104,7 @@ jobs:
             --rpc-url "$KUB_TESTNET_RPC_URL" \
             --broadcast \
             --legacy \
+            --gas-price "$KUB_LEGACY_GAS_PRICE" \
             -vvvv
 
       - name: Load deployed contracts for validation
@@ -132,6 +145,7 @@ jobs:
             --rpc-url "$KUB_TESTNET_RPC_URL" \
             --broadcast \
             --legacy \
+            --gas-price "$KUB_LEGACY_GAS_PRICE" \
             -vvvv
 
       - name: Apply canonical deployment addresses after successful smoke test
