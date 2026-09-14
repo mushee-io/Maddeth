@@ -1,0 +1,122 @@
+name: Inspect KUB Testnet Deployment
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    name: inspect
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KUB_RPC_URL: https://rpc-testnet.bitkubchain.io
+      EXPECTED_CHAIN_ID: "25925"
+      DEPLOYER: 0x762Af840189565eae4BE107c74DDe046f811236D
+      FIRST_TX: 0x0451ac96de187eb9c0353a5482b8416837cd138f9e7db6941a83448a7ff6658e
+      LAST_TX: 0xfaec9b5169e072f4b72ef7971e1951a4a0bf87ad1ed92726d8f1780685e24a23
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Inspect chain state (read only)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          chain_id="$(cast chain-id --rpc-url "$KUB_RPC_URL")"
+          if [[ "$chain_id" != "$EXPECTED_CHAIN_ID" ]]; then
+            echo "::error::Unexpected chain id: $chain_id (expected $EXPECTED_CHAIN_ID)"
+            exit 1
+          fi
+
+          block_number="$(cast block-number --rpc-url "$KUB_RPC_URL")"
+          balance="$(cast balance "$DEPLOYER" --rpc-url "$KUB_RPC_URL")"
+          gas_hex="$(cast rpc --rpc-url "$KUB_RPC_URL" eth_gasPrice | tr -d '\"')"
+          latest_hex="$(cast rpc --rpc-url "$KUB_RPC_URL" eth_getTransactionCount "$DEPLOYER" latest | tr -d '\"')"
+          pending_hex="$(cast rpc --rpc-url "$KUB_RPC_URL" eth_getTransactionCount "$DEPLOYER" pending | tr -d '\"')"
+          latest="$((16#${latest_hex#0x}))"
+          pending="$((16#${pending_hex#0x}))"
+          queued="$((pending-latest))"
+
+          echo "KUB Testnet block: $block_number"
+          echo "Deployer balance: $balance wei"
+          echo "RPC gas price: $gas_hex"
+          echo "Latest nonce: $latest"
+          echo "Pending nonce: $pending"
+          echo "Queued nonce count: $queued"
+
+          {
+            echo "## KUB Testnet deployment inspection"
+            echo
+            echo "- Chain ID: \`$chain_id\`"
+            echo "- Block: \`$block_number\`"
+            echo "- Deployer: \`$DEPLOYER\`"
+            echo "- Balance: \`$balance wei\`"
+            echo "- RPC gas price: \`$gas_hex\`"
+            echo "- Latest nonce: \`$latest\`"
+            echo "- Pending nonce: \`$pending\`"
+            echo "- Queued nonce count: \`$queued\`"
+            echo
+            echo "### Latest timed-out batch"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for h in "$FIRST_TX" "$LAST_TX"; do
+            echo "=== transaction $h ==="
+            tx="$(cast rpc --rpc-url "$KUB_RPC_URL" eth_getTransactionByHash "$h" || true)"
+            receipt="$(cast rpc --rpc-url "$KUB_RPC_URL" eth_getTransactionReceipt "$h" || true)"
+            echo "tx: $tx"
+            echo "receipt: $receipt"
+            {
+              echo
+              echo "#### \`$h\`"
+              echo '```json'
+              echo "$tx"
+              echo '```'
+              echo '```json'
+              echo "$receipt"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          done
+
+          echo "### Canonical manifest addresses" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo '| Contract | Address | Code |' >> "$GITHUB_STEP_SUMMARY"
+          echo '|---|---|---:|' >> "$GITHUB_STEP_SUMMARY"
+
+          while read -r name addr; do
+            code="$(cast code "$addr" --rpc-url "$KUB_RPC_URL")"
+            if [[ "$code" == "0x" || -z "$code" ]]; then
+              status="EMPTY"
+              bytes=0
+            else
+              status="HAS_CODE"
+              bytes="$(( (${#code} - 2) / 2 ))"
+            fi
+            echo "$name $addr $status bytes=$bytes"
+            echo "| $name | \`$addr\` | $status ($bytes bytes) |" >> "$GITHUB_STEP_SUMMARY"
+          done <<'EOF'
+          WrappedTKUB 0x12090dA7CD79790463f85244A4497686afE5C5bD
+          mUSDC 0x6f1720b05Bdd42AF3F14B361F7e191A41b1eEb83
+          mUSDT 0x47520c264D7215d7D6ec39BadAba7f62e3a69B4b
+          Oracle 0x543d6240bEe8C0DE398FdE05c72EB87e50cf4EF7
+          InterestRateModel 0x5091dBFB534a85cD9b9A13094799E883bdd20F73
+          MaddethPool 0xBAe3C10A935d9aCBD023fbF6356eA279965Ab73F
+          MaddethLens 0x3D7Ba0E8Dd29Bc19647365442B1580E3bcdf3A2d
+          RwaVaultFactory 0x2787fd2074A64932Ffec4BAa79c9D7C102157945
+          SampleRwaVault 0x26838b32339e8e1c91664Ae82b927E93683Db74A
+          EOF
+
+          echo >> "$GITHUB_STEP_SUMMARY"
+          if (( queued > 0 )); then
+            echo "⚠️ Pending transactions are present. Do not start another deployment." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No queued nonce gap was reported by the RPC." >> "$GITHUB_STEP_SUMMARY"
+          fi
