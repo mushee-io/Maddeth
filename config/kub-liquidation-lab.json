@@ -1,0 +1,35 @@
+{
+  "name": "Maddeth Liquidation Lab",
+  "network": "KUB Testnet",
+  "chainId": 25925,
+  "chainIdHex": "0x6545",
+  "rpcUrl": "https://rpc-testnet.bitkubchain.io",
+  "explorer": "https://testnet.kubscan.com",
+  "deploymentStatus": "not-deployed",
+  "contracts": {
+    "pool": null,
+    "lens": null,
+    "oracle": null,
+    "rateModel": null,
+    "labKUB": null,
+    "labUSDC": null
+  },
+  "scenario": {
+    "normalLabKUBPriceUsd": "10",
+    "shockedLabKUBPriceUsd": "8",
+    "labUSDCPriceUsd": "1",
+    "borrowerCollateralLabKUB": "100",
+    "borrowerDebtLabUSDC": "700",
+    "closeFactorBps": 5000,
+    "liquidationBonusBps": 500
+  },
+  "deploymentBlock": null,
+  "deployer": null,
+  "deployedAt": null,
+  "notes": [
+    "TESTNET ONLY. This lab is intentionally isolated from the canonical Maddeth KUB Testnet pool and oracle.",
+    "The lab oracle can only toggle labKUB between fixed $10 and $8 prices; it cannot set arbitrary prices or price canonical assets.",
+    "labKUB and labUSDC are public-mint test assets with no production value.",
+    "The intended demo is Wallet A opens a healthy position, anyone toggles the bounded price shock, then Wallet B liquidates Wallet A."
+  ]
+}
