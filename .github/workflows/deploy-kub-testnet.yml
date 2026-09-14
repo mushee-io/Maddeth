@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: "Type DEPLOY-KUB-TESTNET to broadcast real transactions on chain 25925"
+        description: "Type DEPLOY-KUB-TESTNET to broadcast a fresh deployment on chain 25925"
         required: true
         type: string
 
@@ -43,7 +43,7 @@ jobs:
         with:
           version: stable
 
-      - name: Require correct RPC and funded signer
+      - name: Require safe fresh-deployment state
         shell: bash
         run: |
           set -euo pipefail
@@ -51,19 +51,39 @@ jobs:
             echo "Missing KUB_TESTNET_PRIVATE_KEY environment secret."
             exit 1
           fi
+
+          STATUS=$(node -p "JSON.parse(require('fs').readFileSync('config/kub-testnet.json','utf8')).deploymentStatus")
+          if [ "$STATUS" = "deployed" ]; then
+            echo "Refusing fresh deployment: config/kub-testnet.json already records a validated deployment."
+            echo "Use the existing deployment instead of creating duplicates."
+            exit 1
+          fi
+
           DEPLOYER=$(cast wallet address --private-key "$PRIVATE_KEY")
           BALANCE=$(cast balance "$DEPLOYER" --rpc-url "$KUB_TESTNET_RPC_URL")
           CHAIN_ID=$(cast chain-id --rpc-url "$KUB_TESTNET_RPC_URL")
-          MIN_BALANCE=100000000000000000
+          LATEST_HEX=$(cast rpc --rpc-url "$KUB_TESTNET_RPC_URL" eth_getTransactionCount "$DEPLOYER" latest | tr -d '"')
+          PENDING_HEX=$(cast rpc --rpc-url "$KUB_TESTNET_RPC_URL" eth_getTransactionCount "$DEPLOYER" pending | tr -d '"')
+          LATEST_NONCE=$((16#${LATEST_HEX#0x}))
+          PENDING_NONCE=$((16#${PENDING_HEX#0x}))
+          MIN_BALANCE=750000000000000000
+
           echo "KUB Testnet chain id: $CHAIN_ID"
           echo "Deployer: $DEPLOYER"
           echo "Native balance (wei): $BALANCE"
+          echo "Latest nonce: $LATEST_NONCE"
+          echo "Pending nonce: $PENDING_NONCE"
+
           if [ "$CHAIN_ID" != "25925" ]; then
             echo "Refusing to deploy: RPC is not KUB Testnet chain 25925."
             exit 1
           fi
+          if [ "$PENDING_NONCE" != "$LATEST_NONCE" ]; then
+            echo "Refusing to deploy: signer has pending transactions. Resolve them first."
+            exit 1
+          fi
           if [ "$BALANCE" -lt "$MIN_BALANCE" ]; then
-            echo "Refusing to deploy: keep at least 0.1 tKUB available for deployment and smoke-test gas."
+            echo "Refusing to deploy: keep at least 0.75 tKUB available for the full deployment and smoke test."
             exit 1
           fi
 
@@ -92,6 +112,8 @@ jobs:
           node --check scripts/apply-deployment.mjs
           node --check scripts/export-deployment-env.mjs
           node --check scripts/check-frontend.mjs
+          node --check scripts/first-unresolved-deployment-nonce.mjs
+          node --check scripts/validate-kub-deployment.mjs
           node scripts/check-frontend.mjs
           git diff --check
           forge clean
@@ -120,7 +142,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for ADDRESS in "$MADDETH_POOL" "$MADDETH_LENS" "$ORACLE" "$RWA_FACTORY" "$SAMPLE_RWA" "$WRAPPED_KUB" "$TEST_USDC" "$TEST_USDT"; do
+          for ADDRESS in "$MADDETH_POOL" "$MADDETH_LENS" "$ORACLE" "$INTEREST_RATE_MODEL" "$RWA_FACTORY" "$SAMPLE_RWA" "$WRAPPED_KUB" "$TEST_USDC" "$TEST_USDT"; do
             if ! [[ "$ADDRESS" =~ ^0x[0-9a-fA-F]{40}$ ]]; then
               echo "Invalid deployment address: $ADDRESS"
               exit 1
@@ -132,6 +154,15 @@ jobs:
             fi
           done
           echo "KUB Testnet bytecode checks passed."
+
+      - name: Validate receipts and protocol wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/validate-kub-deployment.mjs \
+            deployment-kub-testnet.json \
+            broadcast/DeployKubTestnet.s.sol/25925/run-latest.json \
+            "$KUB_TESTNET_RPC_URL"
 
       - name: End-to-end KUB Testnet lending smoke test
         run: |
