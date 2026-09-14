@@ -9,6 +9,14 @@
     {
       "source": "/app/liquidation-lab/",
       "destination": "/app/liquidation-lab/index.html"
+    },
+    {
+      "source": "/app/readiness",
+      "destination": "/app/readiness/index.html"
+    },
+    {
+      "source": "/app/readiness/",
+      "destination": "/app/readiness/index.html"
     }
   ]
 }
