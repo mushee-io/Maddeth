@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
@@ -66,7 +66,7 @@ jobs:
             echo "- Pending nonce: $pending"
             echo "- Queued nonce count: $queued"
             echo
-            echo "### Latest timed-out batch"
+            echo "### Completed deployment batch"
           } >> "$GITHUB_STEP_SUMMARY"
 
           for h in "$FIRST_TX" "$LAST_TX"; do
@@ -89,7 +89,7 @@ jobs:
 
           {
             echo
-            echo "### Canonical manifest addresses"
+            echo "### Completed deployment addresses"
             echo
             echo '| Contract | Address | Code |'
             echo '|---|---|---:|'
@@ -107,15 +107,15 @@ jobs:
             echo "$contract_name $addr $status bytes=$bytes"
             echo "| $contract_name | $addr | $status ($bytes bytes) |" >> "$GITHUB_STEP_SUMMARY"
           done <<'EOF'
-          WrappedTKUB 0x12090dA7CD79790463f85244A4497686afE5C5bD
-          mUSDC 0x6f1720b05Bdd42AF3F14B361F7e191A41b1eEb83
-          mUSDT 0x47520c264D7215d7D6ec39BadAba7f62e3a69B4b
-          Oracle 0x543d6240bEe8C0DE398FdE05c72EB87e50cf4EF7
-          InterestRateModel 0x5091dBFB534a85cD9b9A13094799E883bdd20F73
-          MaddethPool 0xBAe3C10A935d9aCBD023fbF6356eA279965Ab73F
-          MaddethLens 0x3D7Ba0E8Dd29Bc19647365442B1580E3bcdf3A2d
-          RwaVaultFactory 0x2787fd2074A64932Ffec4BAa79c9D7C102157945
-          SampleRwaVault 0x26838b32339e8e1c91664Ae82b927E93683Db74A
+          WrappedTKUB 0x9f99A8573F7A330eA01E04117e29d98e0164f88E
+          mUSDC 0x2d6f6A9b93dE56E4169fbc7C5a2F1dE0B55bC1F8
+          mUSDT 0x5609661078c717b996Ab0185d5a555925Da27bE5
+          Oracle 0x4D468eb9b0b7AD964a87Cb79E5D329D9a22a9D36
+          InterestRateModel 0x127f127281f8Be23D9789a44fFFC7a2A980BE6d6
+          MaddethPool 0xe381d4d97fA0206D447d1E965F1c1dB96cC5fDc6
+          MaddethLens 0x55F4a27C67916A47E8421576c07cB2Ffe7B7022d
+          RwaVaultFactory 0x76Dd7E8A3f77f7cD2C3d84C025cBBD01670991A4
+          SampleRwaVault 0x0958Cc85232D8393B92D1463D2DFeB4FEFb8B801
           EOF
 
           echo >> "$GITHUB_STEP_SUMMARY"
