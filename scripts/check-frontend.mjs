@@ -8,6 +8,7 @@ const pages = [
   'app/markets/musdc/index.html',
   'app/markets/musdt/index.html',
   'app/borrow/index.html',
+  'app/liquidations/index.html',
   'app/rwa/index.html',
   'app/portfolio/index.html',
   'app/protocol/index.html',
@@ -39,6 +40,7 @@ const requiredRoutes = {
   'app/index.html': ['dashSupplied','dashBorrowed','dashLiquidity','dashMarkets','connectWallet','networkPill','liveMode','sandboxMode'],
   'app/markets/index.html': ['metricSupplied','metricBorrowed','metricLiquidity','metricMarkets','marketRows','refreshMarkets','mintUsdc','mintUsdt'],
   'app/borrow/index.html': ['supplyAsset','supplyAmount','borrowAsset','borrowAmount','borrowLiquidity','ltvValue','healthFactor','previewBorrow','submitBorrow','repayButton','withdrawButton'],
+  'app/liquidations/index.html': ['scanButton','candidateRows','borrowerAddress','inspectButton','borrowerHealth','debtAsset','collateralAsset','repayAmount','useMaxClose','previewLiquidation','executeLiquidation','mintDebtAsset'],
   'app/rwa/index.html': ['rwaStatus','rwaCap','rwaDeposits','rwaDebt','rwaMaturity','rwaAccess','rwaDepositButton','rwaWithdrawButton'],
   'app/portfolio/index.html': ['portfolioDisconnected','portfolioLive','portfolioTitle','portfolioConnect','portfolioRows','portfolioHealth'],
   'app/protocol/index.html': ['deploymentLabel','contractStatus']
@@ -61,4 +63,9 @@ const appJs = readFileSync('src/app-pages.js','utf8');
 if (!/deploymentReady/.test(appJs) || !/liveProtocolSnapshot/.test(appJs)) throw new Error('Live protocol integration missing from app-pages.js');
 if (!/state\.sandbox/.test(appJs)) throw new Error('Sandbox isolation missing from app-pages.js');
 if (!/noopener noreferrer/.test(appJs)) throw new Error('Dynamic external link hardening missing');
+const liquidationJs = readFileSync('src/liquidations.js','utf8');
+if (!/Borrowed\(address,address,uint256,uint256\)/.test(liquidationJs)) throw new Error('Liquidation borrower event scanner missing');
+if (!/liquidate\(address,address,address,uint256\)/.test(liquidationJs)) throw new Error('Liquidation execution path missing');
+if (!/eth_estimateGas/.test(liquidationJs)) throw new Error('Liquidation execution must fail closed through gas estimation');
+if (!/CLOSE_FACTOR_BPS\s*=\s*5_000n/.test(liquidationJs)) throw new Error('Liquidation close factor preview is not pinned to protocol value');
 console.log(`Frontend integrity PASS · ${pages.length} routes · multipage Maddeth application enforced`);
