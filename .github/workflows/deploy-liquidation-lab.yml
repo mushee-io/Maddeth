@@ -94,6 +94,9 @@ jobs:
           rm -f deployment-kub-liquidation-lab.json
           forge script script/DeployLiquidationLab.s.sol:DeployLiquidationLab \
             --rpc-url "$KUB_TESTNET_RPC_URL" \
+            --legacy \
+            --gas-price "$KUB_LEGACY_GAS_PRICE" \
+            --gas-estimate-multiplier 250 \
             -vvvv
           test -s deployment-kub-liquidation-lab.json
           node - <<'NODE'
