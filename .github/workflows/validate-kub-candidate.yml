@@ -1,0 +1,52 @@
+name: Validate KUB Testnet Candidate
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - "scripts/validate-kub-deployment.mjs"
+      - "scripts/first-unresolved-deployment-nonce.mjs"
+      - ".github/workflows/validate-kub-candidate.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KUB_TESTNET_RPC_URL: https://rpc-testnet.bitkubchain.io
+      SOURCE_RUN_ID: "34818800131"
+      SOURCE_ARTIFACT: kub-testnet-deployment-34818800131
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Restore completed deployment evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .candidate
+          mkdir -p .candidate
+          gh run download "$SOURCE_RUN_ID" --repo "${{ github.repository }}" --name "$SOURCE_ARTIFACT" --dir .candidate
+          test -s .candidate/deployment-kub-testnet.json
+          test -s .candidate/broadcast/DeployKubTestnet.s.sol/25925/run-latest.json
+
+      - name: Validate receipts, contracts and protocol wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/validate-kub-deployment.mjs \
+            .candidate/deployment-kub-testnet.json \
+            .candidate/broadcast/DeployKubTestnet.s.sol/25925/run-latest.json \
+            "$KUB_TESTNET_RPC_URL"
