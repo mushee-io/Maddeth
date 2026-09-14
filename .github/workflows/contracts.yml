@@ -54,6 +54,8 @@ jobs:
           node --input-type=module --check < src/app-pages.js
           node --input-type=module --check < src/liquidations.js
           node --input-type=module --check < src/liquidation-lab.js
+          node --input-type=module --check < src/liquidation-lab-inline.js
+          node --input-type=module --check < src/risk-admin.js
           node --check scripts/apply-deployment.mjs
           node --check scripts/apply-liquidation-lab-deployment.mjs
           node --check scripts/check-frontend.mjs
