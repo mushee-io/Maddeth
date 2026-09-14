@@ -1,0 +1,157 @@
+name: Deploy KUB Liquidation Lab
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type DEPLOY-LIQUIDATION-LAB to broadcast the isolated lab on KUB Testnet"
+        required: true
+        type: string
+
+concurrency:
+  group: maddeth-kub-liquidation-lab
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  deploy-lab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: kub-testnet
+    env:
+      KUB_TESTNET_RPC_URL: https://rpc-testnet.bitkubchain.io
+      PRIVATE_KEY: ${{ secrets.KUB_TESTNET_PRIVATE_KEY }}
+    steps:
+      - name: Require explicit confirmation
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.confirm }}" != "DEPLOY-LIQUIDATION-LAB" ]; then
+            echo "Liquidation lab confirmation did not match."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Require safe isolated-lab state
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$PRIVATE_KEY"
+          STATUS=$(node -p "JSON.parse(require('fs').readFileSync('config/kub-liquidation-lab.json','utf8')).deploymentStatus")
+          if [ "$STATUS" = "deployed" ]; then
+            echo "Refusing duplicate lab deployment: registry already says deployed."
+            exit 1
+          fi
+          CHAIN_ID=$(cast chain-id --rpc-url "$KUB_TESTNET_RPC_URL")
+          [ "$CHAIN_ID" = "25925" ] || { echo "Wrong chain: $CHAIN_ID"; exit 1; }
+          DEPLOYER=$(cast wallet address --private-key "$PRIVATE_KEY")
+          BALANCE=$(cast balance "$DEPLOYER" --rpc-url "$KUB_TESTNET_RPC_URL")
+          LATEST_HEX=$(cast rpc --rpc-url "$KUB_TESTNET_RPC_URL" eth_getTransactionCount "$DEPLOYER" latest | tr -d '"')
+          PENDING_HEX=$(cast rpc --rpc-url "$KUB_TESTNET_RPC_URL" eth_getTransactionCount "$DEPLOYER" pending | tr -d '"')
+          LATEST=$((16#${LATEST_HEX#0x}))
+          PENDING=$((16#${PENDING_HEX#0x}))
+          [ "$LATEST" = "$PENDING" ] || { echo "Signer has pending transactions."; exit 1; }
+          [ "$BALANCE" -ge 300000000000000000 ] || { echo "Keep at least 0.30 tKUB for lab deployment."; exit 1; }
+          echo "Lab deployer: $DEPLOYER"
+          echo "Balance: $BALANCE wei"
+
+      - name: Resolve KUB legacy gas price
+        shell: bash
+        run: |
+          set -euo pipefail
+          GAS_PRICE_WEI=$(cast gas-price --rpc-url "$KUB_TESTNET_RPC_URL")
+          [[ "$GAS_PRICE_WEI" =~ ^[0-9]+$ ]] && [ "$GAS_PRICE_WEI" -gt 0 ]
+          echo "KUB_LEGACY_GAS_PRICE=$GAS_PRICE_WEI" >> "$GITHUB_ENV"
+
+      - name: Build and test before lab broadcast
+        run: |
+          set -euo pipefail
+          node --input-type=module --check < src/liquidation-lab.js
+          node --check scripts/apply-liquidation-lab-deployment.mjs
+          node scripts/check-frontend.mjs
+          git diff --check
+          forge clean
+          forge build
+          forge test -vvv
+
+      - name: Broadcast isolated liquidation lab
+        run: |
+          set -euo pipefail
+          forge script script/DeployLiquidationLab.s.sol:DeployLiquidationLab \
+            --rpc-url "$KUB_TESTNET_RPC_URL" \
+            --broadcast \
+            --legacy \
+            --gas-price "$KUB_LEGACY_GAS_PRICE" \
+            --gas-estimate-multiplier 250 \
+            --slow \
+            -vvvv
+
+      - name: Validate lab bytecode and wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s deployment-kub-liquidation-lab.json
+          for KEY in pool lens oracle rateModel labKUB labUSDC; do
+            ADDRESS=$(node -p "JSON.parse(require('fs').readFileSync('deployment-kub-liquidation-lab.json','utf8')).$KEY")
+            [[ "$ADDRESS" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "Invalid $KEY: $ADDRESS"; exit 1; }
+            CODE=$(cast code "$ADDRESS" --rpc-url "$KUB_TESTNET_RPC_URL")
+            [ "$CODE" != "0x" ] || { echo "No bytecode at $KEY $ADDRESS"; exit 1; }
+          done
+          POOL=$(node -p "JSON.parse(require('fs').readFileSync('deployment-kub-liquidation-lab.json','utf8')).pool")
+          ORACLE=$(node -p "JSON.parse(require('fs').readFileSync('deployment-kub-liquidation-lab.json','utf8')).oracle")
+          LAB_KUB=$(node -p "JSON.parse(require('fs').readFileSync('deployment-kub-liquidation-lab.json','utf8')).labKUB")
+          LAB_USDC=$(node -p "JSON.parse(require('fs').readFileSync('deployment-kub-liquidation-lab.json','utf8')).labUSDC")
+          WIRED_ORACLE=$(cast call "$POOL" 'oracle()(address)' --rpc-url "$KUB_TESTNET_RPC_URL")
+          [ "${WIRED_ORACLE,,}" = "${ORACLE,,}" ] || { echo "Pool/oracle wiring mismatch"; exit 1; }
+          COUNT=$(cast call "$POOL" 'marketCount()(uint256)' --rpc-url "$KUB_TESTNET_RPC_URL")
+          [ "$COUNT" = "2" ] || { echo "Expected 2 lab markets, got $COUNT"; exit 1; }
+          PRICE=$(cast call "$ORACLE" 'getPrice(address)((uint256,uint256))' "$LAB_KUB" --rpc-url "$KUB_TESTNET_RPC_URL" | head -n1)
+          echo "Normal labKUB oracle response: $PRICE"
+          CASH=$(cast call "$LAB_USDC" 'balanceOf(address)(uint256)' "$POOL" --rpc-url "$KUB_TESTNET_RPC_URL")
+          [ "$CASH" -gt 0 ] || { echo "Lab pool has no seeded labUSDC liquidity"; exit 1; }
+          echo "Liquidation lab wiring validation PASS."
+
+      - name: Apply validated lab registry
+        run: |
+          set -euo pipefail
+          node scripts/apply-liquidation-lab-deployment.mjs
+          node --input-type=module --check < src/liquidation-lab.js
+          node scripts/check-frontend.mjs
+          git diff --check
+
+      - name: Commit validated liquidation lab registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No lab registry changes to commit."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add config/kub-liquidation-lab.json
+            git commit -m "Record validated KUB liquidation lab deployment"
+            git push origin HEAD:main
+          fi
+
+      - name: Preserve lab deployment artifacts
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: kub-liquidation-lab-${{ github.run_id }}
+          path: |
+            deployment-kub-liquidation-lab.json
+            broadcast/DeployLiquidationLab.s.sol/25925/run-latest.json
+            broadcast/DeployLiquidationLab.s.sol/25925/run-*.json
+          if-no-files-found: warn
+          retention-days: 30
