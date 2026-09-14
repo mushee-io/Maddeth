@@ -1,22 +1,23 @@
 name: Inspect KUB Testnet Deployment
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 permissions:
   contents: read
 
 jobs:
   inspect:
-    name: inspect
+    name: Inspect chain state
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      KUB_RPC_URL: https://rpc-testnet.bitkubchain.io
+      KUB_RPC_URL: "https://rpc-testnet.bitkubchain.io"
       EXPECTED_CHAIN_ID: "25925"
-      DEPLOYER: 0x762Af840189565eae4BE107c74DDe046f811236D
-      FIRST_TX: 0x0451ac96de187eb9c0353a5482b8416837cd138f9e7db6941a83448a7ff6658e
-      LAST_TX: 0xfaec9b5169e072f4b72ef7971e1951a4a0bf87ad1ed92726d8f1780685e24a23
+      DEPLOYER: "0x762Af840189565eae4BE107c74DDe046f811236D"
+      FIRST_TX: "0x0451ac96de187eb9c0353a5482b8416837cd138f9e7db6941a83448a7ff6658e"
+      LAST_TX: "0xfaec9b5169e072f4b72ef7971e1951a4a0bf87ad1ed92726d8f1780685e24a23"
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,7 +27,7 @@ jobs:
         with:
           version: stable
 
-      - name: Inspect chain state (read only)
+      - name: Inspect KUB testnet state
         shell: bash
         run: |
           set -euo pipefail
@@ -56,14 +57,14 @@ jobs:
           {
             echo "## KUB Testnet deployment inspection"
             echo
-            echo "- Chain ID: \`$chain_id\`"
-            echo "- Block: \`$block_number\`"
-            echo "- Deployer: \`$DEPLOYER\`"
-            echo "- Balance: \`$balance wei\`"
-            echo "- RPC gas price: \`$gas_hex\`"
-            echo "- Latest nonce: \`$latest\`"
-            echo "- Pending nonce: \`$pending\`"
-            echo "- Queued nonce count: \`$queued\`"
+            echo "- Chain ID: $chain_id"
+            echo "- Block: $block_number"
+            echo "- Deployer: $DEPLOYER"
+            echo "- Balance: $balance wei"
+            echo "- RPC gas price: $gas_hex"
+            echo "- Latest nonce: $latest"
+            echo "- Pending nonce: $pending"
+            echo "- Queued nonce count: $queued"
             echo
             echo "### Latest timed-out batch"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -76,7 +77,7 @@ jobs:
             echo "receipt: $receipt"
             {
               echo
-              echo "#### \`$h\`"
+              echo "#### $h"
               echo '```json'
               echo "$tx"
               echo '```'
@@ -86,12 +87,15 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           done
 
-          echo "### Canonical manifest addresses" >> "$GITHUB_STEP_SUMMARY"
-          echo >> "$GITHUB_STEP_SUMMARY"
-          echo '| Contract | Address | Code |' >> "$GITHUB_STEP_SUMMARY"
-          echo '|---|---|---:|' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo
+            echo "### Canonical manifest addresses"
+            echo
+            echo '| Contract | Address | Code |'
+            echo '|---|---|---:|'
+          } >> "$GITHUB_STEP_SUMMARY"
 
-          while read -r name addr; do
+          while read -r contract_name addr; do
             code="$(cast code "$addr" --rpc-url "$KUB_RPC_URL")"
             if [[ "$code" == "0x" || -z "$code" ]]; then
               status="EMPTY"
@@ -100,8 +104,8 @@ jobs:
               status="HAS_CODE"
               bytes="$(( (${#code} - 2) / 2 ))"
             fi
-            echo "$name $addr $status bytes=$bytes"
-            echo "| $name | \`$addr\` | $status ($bytes bytes) |" >> "$GITHUB_STEP_SUMMARY"
+            echo "$contract_name $addr $status bytes=$bytes"
+            echo "| $contract_name | $addr | $status ($bytes bytes) |" >> "$GITHUB_STEP_SUMMARY"
           done <<'EOF'
           WrappedTKUB 0x12090dA7CD79790463f85244A4497686afE5C5bD
           mUSDC 0x6f1720b05Bdd42AF3F14B361F7e191A41b1eEb83
@@ -116,7 +120,7 @@ jobs:
 
           echo >> "$GITHUB_STEP_SUMMARY"
           if (( queued > 0 )); then
-            echo "⚠️ Pending transactions are present. Do not start another deployment." >> "$GITHUB_STEP_SUMMARY"
+            echo "Pending transactions are present. Do not start another deployment." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "No queued nonce gap was reported by the RPC." >> "$GITHUB_STEP_SUMMARY"
           fi
