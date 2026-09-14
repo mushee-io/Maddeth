@@ -105,10 +105,15 @@ assert(firstToken(call(wtkub, 'decimals()(uint8)')) === '18', 'WtKUB decimals mi
 assert(firstToken(call(usdc, 'decimals()(uint8)')) === '6', 'mUSDC decimals mismatch');
 assert(firstToken(call(usdt, 'decimals()(uint8)')) === '6', 'mUSDT decimals mismatch');
 
-const usdcLiquidity = BigInt(firstToken(call(usdc, 'balanceOf(address)(uint256)', [pool])));
-const usdtLiquidity = BigInt(firstToken(call(usdt, 'balanceOf(address)(uint256)', [pool])));
-assert(usdcLiquidity >= 1_000_000n * 1_000_000n, `mUSDC seed liquidity missing: ${usdcLiquidity}`);
-assert(usdtLiquidity >= 1_000_000n * 1_000_000n, `mUSDT seed liquidity missing: ${usdtLiquidity}`);
+const seed = 1_000_000n * 1_000_000n;
+for (const [name, asset] of [['mUSDC', usdc], ['mUSDT', usdt]]) {
+  const cash = BigInt(firstToken(call(asset, 'balanceOf(address)(uint256)', [pool])));
+  const totals = call(pool, 'marketTotals(address)(uint256,uint256,uint256,uint256)', [asset]).split(/\s+/);
+  const supplied = BigInt(totals[0]);
+  const borrowed = BigInt(totals[1]);
+  assert(supplied >= seed, `${name} seeded supply missing: ${supplied}`);
+  assert(cash + borrowed >= seed, `${name} accounting liquidity below seed: cash=${cash} borrowed=${borrowed}`);
+}
 console.log('Markets and seeded stable liquidity: OK');
 
 for (const asset of [wtkub, usdc, usdt]) {
