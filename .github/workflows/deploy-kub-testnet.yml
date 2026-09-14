@@ -18,7 +18,7 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     environment: kub-testnet
     env:
       KUB_TESTNET_RPC_URL: https://rpc-testnet.bitkubchain.io
@@ -106,6 +106,7 @@ jobs:
             --broadcast \
             --legacy \
             --gas-price "$KUB_LEGACY_GAS_PRICE" \
+            --slow \
             -vvvv
 
       - name: Load deployed contracts for validation
@@ -140,6 +141,7 @@ jobs:
             --broadcast \
             --legacy \
             --gas-price "$KUB_LEGACY_GAS_PRICE" \
+            --slow \
             -vvvv
 
       - name: Apply canonical deployment addresses after successful smoke test
@@ -166,7 +168,7 @@ jobs:
 
       - name: Preserve deployment artifacts
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: kub-testnet-deployment-${{ github.run_id }}
           path: |
