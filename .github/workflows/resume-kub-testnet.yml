@@ -155,6 +155,15 @@ jobs:
           done
           echo "All deployment bytecode checks passed."
 
+      - name: Validate receipts and protocol wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/validate-kub-deployment.mjs \
+            deployment-kub-testnet.json \
+            broadcast/DeployKubTestnet.s.sol/25925/run-latest.json \
+            "$KUB_TESTNET_RPC_URL"
+
       - name: End-to-end KUB Testnet lending smoke test
         shell: bash
         run: |
