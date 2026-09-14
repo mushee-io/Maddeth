@@ -24,7 +24,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
@@ -37,14 +39,42 @@ jobs:
           python-version: "3.12"
 
       - name: Install Slither
-        run: pip install "slither-analyzer==0.11.3"
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check "slither-analyzer==0.11.3"
+          slither --version
 
       - name: Build
-        run: forge build
+        run: |
+          set -euo pipefail
+          forge build
 
       - name: Run high-severity static analysis
         run: |
+          set -euo pipefail
           slither . \
             --filter-paths "test|script|contracts/mocks" \
             --exclude naming-convention,solc-version,similar-names \
             --fail-high
+
+      - name: Capture full static-analysis evidence
+        if: always()
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          slither . \
+            --filter-paths "test|script|contracts/mocks" \
+            --exclude naming-convention,solc-version,similar-names \
+            --json slither-report.json \
+            > slither-full.log 2>&1 || true
+
+      - name: Upload Slither evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: slither-evidence-${{ github.run_id }}
+          path: |
+            slither-report.json
+            slither-full.log
+          if-no-files-found: warn
+          retention-days: 14
