@@ -5,12 +5,18 @@ const all = selector => Array.from(document.querySelectorAll(selector));
 const WAD = 10n ** 18n;
 
 function ensureTerminalDesign() {
-  if (document.querySelector('link[data-maddeth-terminal]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = '/src/maddeth-terminal.css';
-  link.dataset.maddethTerminal = 'true';
-  document.head.appendChild(link);
+  const styles = [
+    { href: '/src/maddeth-terminal.css', marker: 'maddethTerminal' },
+    { href: '/src/maddeth-reference-corrections.css', marker: 'maddethReferenceCorrections' }
+  ];
+  for (const style of styles) {
+    if (document.querySelector(`link[data-${style.marker.replace(/[A-Z]/g, m => `-${m.toLowerCase()}`)}]`)) continue;
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = style.href;
+    link.dataset[style.marker] = 'true';
+    document.head.appendChild(link);
+  }
 }
 ensureTerminalDesign();
 
