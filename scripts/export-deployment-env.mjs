@@ -13,6 +13,7 @@ if (Number(manifest.chainId) !== 25925) {
 }
 
 const mapping = {
+  DEPLOYMENT_DEPLOYER: 'deployer',
   MADDETH_POOL: 'maddethPool',
   MADDETH_LENS: 'maddethLens',
   ORACLE: 'oracle',
