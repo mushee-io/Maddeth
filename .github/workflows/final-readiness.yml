@@ -1,0 +1,59 @@
+name: Final Testnet Readiness
+
+on:
+  workflow_dispatch:
+    inputs:
+      check_production_ui:
+        description: "Also verify the deployed maddeth.vercel.app routes"
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  final-readiness:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Repository readiness guards
+        run: |
+          node --check scripts/check-frontend.mjs
+          node --check scripts/check-release-readiness.mjs
+          node --check scripts/kub-health-check.mjs
+          node --input-type=module --check < src/readiness.js
+          node scripts/check-frontend.mjs
+          node scripts/check-release-readiness.mjs
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Full contract build
+        run: forge build
+
+      - name: Full unit fuzz invariant and stress suite
+        run: forge test -vvv
+
+      - name: Canonical KUB health check
+        run: node scripts/kub-health-check.mjs
+
+      - name: Verify production frontend routes
+        if: ${{ inputs.check_production_ui }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 3 https://maddeth.vercel.app/app/ > /tmp/dashboard.html
+          curl --fail --silent --show-error --retry 3 https://maddeth.vercel.app/app/liquidations/ > /tmp/liquidations.html
+          curl --fail --silent --show-error --retry 3 https://maddeth.vercel.app/app/protocol/ > /tmp/protocol.html
+          curl --fail --silent --show-error --retry 3 https://maddeth.vercel.app/app/readiness/ > /tmp/readiness.html
+          grep -q "Liquidation Lab" /tmp/liquidations.html
+          grep -q "Risk & resilience console" /tmp/protocol.html
+          grep -q "FINAL TESTNET READINESS" /tmp/readiness.html
+          echo "Production UI route smoke PASS"
