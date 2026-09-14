@@ -18,6 +18,14 @@ function firstToken(value) {
   return String(value).trim().split(/\s+/)[0] || '';
 }
 
+function outputValues(value) {
+  return String(value)
+    .trim()
+    .split(/\r?\n/)
+    .map((line) => firstToken(line))
+    .filter(Boolean);
+}
+
 function call(address, signature, args = []) {
   return runCast(['call', address, signature, ...args, '--rpc-url', rpcUrl]);
 }
@@ -92,9 +100,9 @@ for (let i = 0; i < expectedAssets.length; i += 1) {
   assert(lower(listed) === lower(expectedAssets[i]), `listedAssets(${i}) mismatch`);
 }
 
-const wConfig = call(pool, 'markets(address)(bool,bool,uint16,uint16,uint16,uint16,uint128,uint128,address)', [wtkub]).split(/\s+/);
-const uConfig = call(pool, 'markets(address)(bool,bool,uint16,uint16,uint16,uint16,uint128,uint128,address)', [usdc]).split(/\s+/);
-const tConfig = call(pool, 'markets(address)(bool,bool,uint16,uint16,uint16,uint16,uint128,uint128,address)', [usdt]).split(/\s+/);
+const wConfig = outputValues(call(pool, 'markets(address)(bool,bool,uint16,uint16,uint16,uint16,uint128,uint128,address)', [wtkub]));
+const uConfig = outputValues(call(pool, 'markets(address)(bool,bool,uint16,uint16,uint16,uint16,uint128,uint128,address)', [usdc]));
+const tConfig = outputValues(call(pool, 'markets(address)(bool,bool,uint16,uint16,uint16,uint16,uint128,uint128,address)', [usdt]));
 for (const [name, cfg] of [['WtKUB', wConfig], ['mUSDC', uConfig], ['mUSDT', tConfig]]) {
   assert(cfg[0] === 'true', `${name} market is not listed`);
   assert(cfg[1] === 'false', `${name} market is paused`);
@@ -108,7 +116,7 @@ assert(firstToken(call(usdt, 'decimals()(uint8)')) === '6', 'mUSDT decimals mism
 const seed = 1_000_000n * 1_000_000n;
 for (const [name, asset] of [['mUSDC', usdc], ['mUSDT', usdt]]) {
   const cash = BigInt(firstToken(call(asset, 'balanceOf(address)(uint256)', [pool])));
-  const totals = call(pool, 'marketTotals(address)(uint256,uint256,uint256,uint256)', [asset]).split(/\s+/);
+  const totals = outputValues(call(pool, 'marketTotals(address)(uint256,uint256,uint256,uint256)', [asset]));
   const supplied = BigInt(totals[0]);
   const borrowed = BigInt(totals[1]);
   assert(supplied >= seed, `${name} seeded supply missing: ${supplied}`);
