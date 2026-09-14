@@ -40,7 +40,10 @@ const requiredRoutes = {
   'app/index.html': ['dashSupplied','dashBorrowed','dashLiquidity','dashMarkets','connectWallet','networkPill','liveMode','sandboxMode'],
   'app/markets/index.html': ['metricSupplied','metricBorrowed','metricLiquidity','metricMarkets','marketRows','refreshMarkets','mintUsdc','mintUsdt'],
   'app/borrow/index.html': ['supplyAsset','supplyAmount','borrowAsset','borrowAmount','borrowLiquidity','ltvValue','healthFactor','previewBorrow','submitBorrow','repayButton','withdrawButton'],
-  'app/liquidations/index.html': ['scanButton','candidateRows','borrowerAddress','inspectButton','borrowerHealth','debtAsset','collateralAsset','repayAmount','useMaxClose','previewLiquidation','executeLiquidation','mintDebtAsset'],
+  'app/liquidations/index.html': [
+    'scanButton','candidateRows','borrowerAddress','inspectButton','borrowerHealth','debtAsset','collateralAsset','repayAmount','useMaxClose','previewLiquidation','executeLiquidation','mintDebtAsset',
+    'liquidation-lab','labStatus','labConnectWallet','labMintCollateral','labOpenPosition','labShockPrice','labResetPrice','labBorrowerInput','labInspectBorrower','labMintDebt','labLiquidate','labBorrowerHealth','labMaxClose','labExpectedSeize'
+  ],
   'app/rwa/index.html': ['rwaStatus','rwaCap','rwaDeposits','rwaDebt','rwaMaturity','rwaAccess','rwaDepositButton','rwaWithdrawButton'],
   'app/portfolio/index.html': ['portfolioDisconnected','portfolioLive','portfolioTitle','portfolioConnect','portfolioRows','portfolioHealth'],
   'app/protocol/index.html': ['deploymentLabel','contractStatus']
@@ -68,4 +71,12 @@ if (!/Borrowed\(address,address,uint256,uint256\)/.test(liquidationJs)) throw ne
 if (!/liquidate\(address,address,address,uint256\)/.test(liquidationJs)) throw new Error('Liquidation execution path missing');
 if (!/eth_estimateGas/.test(liquidationJs)) throw new Error('Liquidation execution must fail closed through gas estimation');
 if (!/CLOSE_FACTOR_BPS\s*=\s*5_000n/.test(liquidationJs)) throw new Error('Liquidation close factor preview is not pinned to protocol value');
+const labInlineJs = readFileSync('src/liquidation-lab-inline.js','utf8');
+if (!/kub-liquidation-lab\.json/.test(labInlineJs)) throw new Error('Embedded lab registry integration missing');
+if (!/setShock\(bool\)/.test(labInlineJs)) throw new Error('Embedded lab bounded oracle shock missing');
+if (!/liquidate\(address,address,address,uint256\)/.test(labInlineJs)) throw new Error('Embedded lab liquidation execution missing');
+if (!/eth_estimateGas/.test(labInlineJs)) throw new Error('Embedded lab must fail closed through gas estimation');
+if (!/account\.toLowerCase\(\) === borrower\.toLowerCase\(\)/.test(labInlineJs)) throw new Error('Embedded lab two-wallet guard missing');
+const siteJs = readFileSync('src/site.js','utf8');
+if (!/\/app\/liquidations\/#liquidation-lab/.test(siteJs)) throw new Error('Lab navigation must remain inside the Liquidations page');
 console.log(`Frontend integrity PASS · ${pages.length} routes · multipage Maddeth application enforced`);
