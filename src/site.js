@@ -29,6 +29,17 @@ function hardenExternalLinks() {
     link.setAttribute('rel', [...rel].join(' '));
   });
 }
+function ensureLiquidationNav() {
+  const nav = document.querySelector('.app-nav');
+  if (!nav || nav.querySelector('[data-app-nav="liquidations"]')) return;
+  const link = document.createElement('a');
+  link.href = '/app/liquidations/';
+  link.dataset.appNav = 'liquidations';
+  link.textContent = 'Liquidations';
+  const rwa = nav.querySelector('[data-app-nav="rwa"]');
+  if (rwa) nav.insertBefore(link, rwa);
+  else nav.appendChild(link);
+}
 function setActiveNav() {
   const page = document.body.dataset.appPage;
   if (!page) return;
@@ -47,6 +58,7 @@ function wireSettings() {
 }
 function init() {
   applyTheme(storageGet('maddeth-theme') || 'system');
+  ensureLiquidationNav();
   wireSettings();
   hardenExternalLinks();
   setActiveNav();
