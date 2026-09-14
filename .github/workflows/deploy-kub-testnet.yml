@@ -34,7 +34,7 @@ jobs:
           fi
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -90,6 +90,7 @@ jobs:
           node --input-type=module --check < src/site.js
           node --input-type=module --check < src/app-pages.js
           node --check scripts/apply-deployment.mjs
+          node --check scripts/export-deployment-env.mjs
           node --check scripts/check-frontend.mjs
           node scripts/check-frontend.mjs
           git diff --check
@@ -111,15 +112,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -f deployment-kub-testnet.json
-          echo "MADDETH_POOL=$(node -p \"require('./deployment-kub-testnet.json').maddethPool\")" >> "$GITHUB_ENV"
-          echo "MADDETH_LENS=$(node -p \"require('./deployment-kub-testnet.json').maddethLens\")" >> "$GITHUB_ENV"
-          echo "ORACLE=$(node -p \"require('./deployment-kub-testnet.json').oracle\")" >> "$GITHUB_ENV"
-          echo "RWA_FACTORY=$(node -p \"require('./deployment-kub-testnet.json').rwaVaultFactory\")" >> "$GITHUB_ENV"
-          echo "SAMPLE_RWA=$(node -p \"require('./deployment-kub-testnet.json').sampleRwaVault\")" >> "$GITHUB_ENV"
-          echo "WRAPPED_KUB=$(node -p \"require('./deployment-kub-testnet.json').wrappedKUB\")" >> "$GITHUB_ENV"
-          echo "TEST_USDC=$(node -p \"require('./deployment-kub-testnet.json').testUSDC\")" >> "$GITHUB_ENV"
-          echo "TEST_USDT=$(node -p \"require('./deployment-kub-testnet.json').testUSDT\")" >> "$GITHUB_ENV"
+          test -s deployment-kub-testnet.json
+          node scripts/export-deployment-env.mjs deployment-kub-testnet.json "$GITHUB_ENV"
 
       - name: Verify deployed bytecode exists before smoke test
         shell: bash
@@ -172,7 +166,7 @@ jobs:
 
       - name: Preserve deployment artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: kub-testnet-deployment-${{ github.run_id }}
           path: |
