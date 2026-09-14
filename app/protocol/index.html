@@ -1,2 +1,129 @@
 <!doctype html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><meta name="theme-color" content="#f5f1eb"/><meta name="referrer" content="no-referrer"/><meta http-equiv="Content-Security-Policy" content="default-src 'self';script-src 'self';style-src 'self';connect-src 'self' https://rpc-testnet.bitkubchain.io;img-src 'self' data:;object-src 'none';base-uri 'none';form-action 'self';upgrade-insecure-requests"/><meta name="description" content="Maddeth protocol architecture, risk and security model."/><title>Protocol — Maddeth</title><link rel="stylesheet" href="/src/styles.css"/><link rel="stylesheet" href="/src/app-pages.css"/></head><body class="app-page" data-app-page="protocol"><div class="app-announcement">KUB TESTNET · CHAIN 25925 · TESTNET HARDENED · INDEPENDENT AUDIT PENDING</div><header class="app-topbar"><a class="brand" href="/"><span class="brand-mark"><i></i><i></i><i></i></span><span>Maddeth</span></a><nav class="app-nav"><a href="/app/" data-app-nav="dashboard">Dashboard</a><a href="/app/markets/" data-app-nav="markets">Markets</a><a href="/app/borrow/" data-app-nav="borrow">Borrow</a><a href="/app/rwa/" data-app-nav="rwa">RWA</a><a href="/app/portfolio/" data-app-nav="portfolio">Portfolio</a><a href="/app/protocol/" data-app-nav="protocol">Protocol</a><a href="/docs/" data-app-nav="docs">Docs</a></nav><div class="app-actions"><button id="networkPill" class="network-pill">Not connected</button><button id="connectWallet" class="primary-btn">Connect wallet</button></div></header><main class="app-main"><section class="protocol-hero"><div><div class="eyebrow">PROTOCOL ARCHITECTURE</div><h1>Built to<br/>fail closed.</h1></div><div class="security-stamp"><strong>TESTNET HARDENED</strong><span>Independent audit pending</span><span>No production funds</span></div></section><div id="txBanner" class="tx-banner hidden"></div><section class="protocol-grid"><article><small>01</small><h2>Pooled lending</h2><p>Supplier and borrower balances use indexed accounting while utilisation drives borrowing costs.</p></article><article><small>02</small><h2>Isolated RWA vaults</h2><p>Real-world credit accounting is separated from permissionless crypto lending markets.</p></article><article><small>03</small><h2>Bitkub oracle adapter</h2><p>Borrowing, withdrawals and liquidations reject invalid, future or stale prices instead of guessing.</p></article><article><small>04</small><h2>Interest rate model</h2><p>Utilisation-sensitive rates coordinate borrowers and suppliers while protocol reserves accrue separately.</p></article><article><small>05</small><h2>Liquidations</h2><p>Close factors, liquidation thresholds and collateral seizure protect solvency when accounts become unhealthy.</p></article><article><small>06</small><h2>Bad debt</h2><p>Reserve accounting and explicit bad-debt paths make insolvency handling observable instead of hidden.</p></article><article><small>07</small><h2>Security controls</h2><p>Market caps, emergency pause, role separation, two-step ownership and fail-closed deployment configuration reduce operational risk.</p></article><article><small>08</small><h2>KUB settlement</h2><p>Maddeth is configured for KUB Testnet chain 25925 with KUBScan visibility and EVM-compatible wallet flows.</p></article></section><section class="security-note"><strong>Unaudited testnet software.</strong> Maddeth should not custody production funds until independent smart-contract review, production oracle policy and mainnet governance are complete.</section><section class="market-toolbar"><div><div class="eyebrow">DOCUMENTATION</div><h3>Need the implementation details?</h3><p>Network configuration, transaction lifecycle and security boundaries are documented separately.</p></div><div class="market-toolbar-actions"><a class="primary-btn" href="/docs/">Open docs ↗</a><a class="secondary-btn" href="https://github.com/mushee-io/Maddeth" target="_blank" rel="noopener noreferrer">GitHub ↗</a></div></section><section class="security-note"><strong id="deploymentLabel">KUB Testnet</strong> · <span id="contractStatus">Checking deployment configuration…</span></section></main><script type="module" src="/src/site.js"></script><script type="module" src="/src/app-pages.js"></script></body></html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <meta name="theme-color" content="#f5f1eb" />
+  <meta name="referrer" content="no-referrer" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self';script-src 'self';style-src 'self';connect-src 'self' https://rpc-testnet.bitkubchain.io;img-src 'self' data:;object-src 'none';base-uri 'none';form-action 'self';upgrade-insecure-requests" />
+  <meta name="description" content="Maddeth protocol architecture, live risk telemetry and emergency administration on KUB Testnet." />
+  <title>Protocol — Maddeth</title>
+  <link rel="stylesheet" href="/src/styles.css" />
+  <link rel="stylesheet" href="/src/app-pages.css" />
+  <link rel="stylesheet" href="/src/risk-admin.css" />
+</head>
+<body class="app-page" data-app-page="protocol">
+  <div class="app-announcement">KUB TESTNET · CHAIN 25925 · PHASE 3 RISK & RESILIENCE · INDEPENDENT AUDIT PENDING</div>
+  <header class="app-topbar">
+    <a class="brand" href="/"><span class="brand-mark"><i></i><i></i><i></i></span><span>Maddeth</span></a>
+    <nav class="app-nav">
+      <a href="/app/" data-app-nav="dashboard">Dashboard</a>
+      <a href="/app/markets/" data-app-nav="markets">Markets</a>
+      <a href="/app/borrow/" data-app-nav="borrow">Borrow</a>
+      <a href="/app/liquidations/" data-app-nav="liquidations">Liquidations</a>
+      <a href="/app/rwa/" data-app-nav="rwa">RWA</a>
+      <a href="/app/portfolio/" data-app-nav="portfolio">Portfolio</a>
+      <a href="/app/protocol/" data-app-nav="protocol">Protocol</a>
+      <a href="#risk-admin">Risk</a>
+      <a href="/docs/" data-app-nav="docs">Docs</a>
+    </nav>
+    <div class="app-actions"><button id="networkPill" class="network-pill">Not connected</button><button id="connectWallet" class="primary-btn">Connect wallet</button></div>
+  </header>
+
+  <main class="app-main">
+    <section class="protocol-hero">
+      <div><div class="eyebrow">PROTOCOL ARCHITECTURE</div><h1>Built to<br/>fail closed.</h1></div>
+      <div class="security-stamp"><strong>PHASE 3 HARDENING</strong><span>Independent audit pending</span><span>No production funds</span></div>
+    </section>
+    <div id="txBanner" class="tx-banner hidden"></div>
+
+    <section class="protocol-grid">
+      <article><small>01</small><h2>Pooled lending</h2><p>Supplier and borrower balances use indexed accounting while utilisation drives borrowing costs.</p></article>
+      <article><small>02</small><h2>Isolated RWA vaults</h2><p>Real-world credit accounting is separated from permissionless crypto lending markets.</p></article>
+      <article><small>03</small><h2>Bitkub oracle adapter</h2><p>Borrowing, withdrawals and liquidations reject zero, future or stale prices instead of guessing.</p></article>
+      <article><small>04</small><h2>Interest rate model</h2><p>Utilisation-sensitive rates coordinate borrowers and suppliers while protocol reserves accrue separately.</p></article>
+      <article><small>05</small><h2>Liquidations</h2><p>Close factors, liquidation thresholds and collateral seizure protect solvency when accounts become unhealthy.</p></article>
+      <article><small>06</small><h2>Bad debt</h2><p>Unrecoverable debt can only be absorbed after enabled collateral is exhausted; reserves are consumed before supplier losses.</p></article>
+      <article><small>07</small><h2>Security controls</h2><p>Market caps, emergency pause, role separation, two-step ownership and fail-closed deployment configuration reduce operational risk.</p></article>
+      <article><small>08</small><h2>KUB settlement</h2><p>Maddeth is configured for KUB Testnet chain 25925 with KUBScan visibility and EVM-compatible wallet flows.</p></article>
+    </section>
+
+    <section class="risk-console" id="risk-admin" aria-labelledby="riskConsoleTitle">
+      <div class="risk-console-head">
+        <div>
+          <div class="eyebrow">PHASE 3 · CANONICAL RISK ADMIN</div>
+          <h2 id="riskConsoleTitle">Risk & resilience console</h2>
+          <p>Read live canonical market risk, oracle freshness, liquidity, reserves and administrator roles. Emergency actions are deliberately narrow: owner or risk admin may pause; only the owner may recover by unpausing.</p>
+        </div>
+        <div class="risk-state">
+          <small>EMERGENCY POSTURE</small>
+          <strong id="riskAlertCount">—</strong>
+          <span id="riskEmergencyStatus">Loading canonical risk state…</span>
+        </div>
+      </div>
+
+      <div id="riskActionBanner" class="tx-banner risk-action-banner hidden" aria-live="polite"></div>
+
+      <section class="risk-metrics">
+        <article><small>Connected wallet</small><strong id="riskConnectedWallet">Not connected</strong><span id="riskRole">Observer</span></article>
+        <article><small>Network</small><strong id="riskNetwork">Not connected</strong><span>KUB Testnet · 25925</span></article>
+        <article><small>Owner</small><strong id="riskOwner">—</strong><span id="riskPendingOwner">—</span></article>
+        <article><small>Risk admin</small><strong id="riskAdminAddress">—</strong><span>Pause-only recovery role</span></article>
+        <article><small>Oracle</small><strong id="riskOracle">—</strong><span>Max age 30 minutes</span></article>
+        <article><small>Protocol</small><strong id="riskProtocolPause">—</strong><span>Owner-only unpause</span></article>
+        <article><small>Markets</small><strong id="riskMarketCount">—</strong><span>Canonical listed assets</span></article>
+      </section>
+
+      <div class="risk-toolbar">
+        <button id="riskConnect" class="primary-btn" type="button">Connect admin wallet</button>
+        <button id="riskNetworkButton" class="secondary-btn" type="button">Switch to KUB</button>
+        <div class="spacer"></div>
+        <button id="riskRefresh" class="secondary-btn" type="button">Refresh risk state</button>
+      </div>
+
+      <div class="risk-market-wrap">
+        <div class="risk-market-head"><span>Market</span><span>Supplied</span><span>Borrowed</span><span>Utilisation</span><span>Cash</span><span>Reserves</span><span>LTV</span><span>Liq. threshold</span><span>Oracle</span><span>Status</span></div>
+        <div id="riskMarketsBody"><div class="risk-market-row"><span>Loading…</span></div></div>
+      </div>
+
+      <section class="risk-actions">
+        <article class="risk-action-card dark">
+          <div class="eyebrow">PROTOCOL EMERGENCY STOP</div>
+          <h3>Global pause</h3>
+          <p>Pause blocks new supply and borrowing across the canonical pool while safe withdrawals remain available. Risk admin may pause immediately; only owner may unpause.</p>
+          <div class="risk-button-grid">
+            <button id="riskPauseProtocol" class="primary-btn" type="button" disabled>Pause protocol</button>
+            <button id="riskUnpauseProtocol" class="secondary-btn" type="button" disabled>Owner unpause</button>
+          </div>
+        </article>
+
+        <article class="risk-action-card">
+          <div class="eyebrow">MARKET EMERGENCY STOP</div>
+          <h3>Per-market pause</h3>
+          <p>Select one canonical market. Parameter editing is intentionally excluded from the browser console; LTV, caps, bonuses and reserve factors remain owner-only contract configuration.</p>
+          <select id="riskMarketSelect" aria-label="Select canonical market"><option value="">Loading markets…</option></select>
+          <div class="risk-button-grid">
+            <button id="riskPauseMarket" class="primary-btn" type="button" disabled>Pause selected</button>
+            <button id="riskUnpauseMarket" class="secondary-btn" type="button" disabled>Owner unpause</button>
+          </div>
+        </article>
+      </section>
+
+      <div class="risk-boundary"><strong>Safety boundary:</strong> this console reads and pauses the canonical KUB Testnet pool. It cannot change oracle prices, manufacture bad debt, edit LTV/caps, absorb bad debt, withdraw reserves or replace the oracle. Destructive fault injection remains confined to Foundry and isolated test labs.</div>
+    </section>
+
+    <section class="security-note"><strong>Unaudited testnet software.</strong> Maddeth should not custody production funds until independent smart-contract review, production oracle policy and mainnet governance are complete.</section>
+
+    <section class="market-toolbar">
+      <div><div class="eyebrow">DOCUMENTATION</div><h3>Need the implementation details?</h3><p>Network configuration, transaction lifecycle and Phase 3 failure boundaries are documented separately.</p></div>
+      <div class="market-toolbar-actions"><a class="primary-btn" href="/docs/">Open docs ↗</a><a class="secondary-btn" href="https://github.com/mushee-io/Maddeth" target="_blank" rel="noopener noreferrer">GitHub ↗</a></div>
+    </section>
+
+    <section class="security-note"><strong id="deploymentLabel">KUB Testnet</strong> · <span id="contractStatus">Checking deployment configuration…</span></section>
+  </main>
+
+  <script type="module" src="/src/site.js"></script>
+  <script type="module" src="/src/app-pages.js"></script>
+  <script type="module" src="/src/risk-admin.js"></script>
+</body>
+</html>
