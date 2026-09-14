@@ -5,14 +5,14 @@
   "chainIdHex": "0x6545",
   "rpcUrl": "https://rpc-testnet.bitkubchain.io",
   "explorer": "https://testnet.kubscan.com",
-  "deploymentStatus": "not-deployed",
+  "deploymentStatus": "deployed",
   "contracts": {
-    "pool": null,
-    "lens": null,
-    "oracle": null,
-    "rateModel": null,
-    "labKUB": null,
-    "labUSDC": null
+    "pool": "0x540ae38FDb411a4C2FB312cB5dfFC1E35949296e",
+    "lens": "0xeEbE90401DB78150Cc8e8ea2317C14bB8e4b974D",
+    "oracle": "0x826Ee7397Ae77503B19709630AC209C03389C3E2",
+    "rateModel": "0xaEA07FDdCFbd662eB5235a4A8f344AADbfa98B01",
+    "labKUB": "0x2Ba113B3C0f3C863E53E44EA5e5D97e9639a0C27",
+    "labUSDC": "0x4ab523F89d006B3b046Dfdc50f074fa7d70Bc1ad"
   },
   "scenario": {
     "normalLabKUBPriceUsd": "10",
@@ -23,13 +23,14 @@
     "closeFactorBps": 5000,
     "liquidationBonusBps": 500
   },
-  "deploymentBlock": null,
-  "deployer": null,
-  "deployedAt": null,
+  "deploymentBlock": 33526945,
+  "deployer": "0x762Af840189565eae4BE107c74DDe046f811236D",
+  "deployedAt": 1789392055,
   "notes": [
     "TESTNET ONLY. This lab is intentionally isolated from the canonical Maddeth KUB Testnet pool and oracle.",
     "The lab oracle can only toggle labKUB between fixed $10 and $8 prices; it cannot set arbitrary prices or price canonical assets.",
     "labKUB and labUSDC are public-mint test assets with no production value.",
-    "The intended demo is Wallet A opens a healthy position, anyone toggles the bounded price shock, then Wallet B liquidates Wallet A."
+    "The intended demo is Wallet A opens a healthy position, anyone toggles the bounded price shock, then Wallet B liquidates Wallet A.",
+    "Recovered from successful Deploy KUB Liquidation Lab run 34848542844 after all 11 broadcast receipts succeeded; the original workflow stopped only because Foundry's annotated uint output was parsed as a Bash integer."
   ]
 }
