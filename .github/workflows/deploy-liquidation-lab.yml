@@ -126,24 +126,46 @@ jobs:
         run: |
           set -euo pipefail
           test -s deployment-kub-liquidation-lab.json
+
+          # Foundry may pretty-print uints as "1000000000000 [1e12]".
+          # Always validate and extract the first decimal token before comparisons.
+          parse_cast_uint() {
+            local raw="$1"
+            local value
+            value=$(printf '%s\n' "$raw" | awk 'NR==1 {print $1}')
+            [[ "$value" =~ ^[0-9]+$ ]] || {
+              echo "Unable to parse uint from cast output: $raw" >&2
+              return 1
+            }
+            printf '%s\n' "$value"
+          }
+
           for KEY in pool lens oracle rateModel labKUB labUSDC; do
             ADDRESS=$(node -p "JSON.parse(require('fs').readFileSync('deployment-kub-liquidation-lab.json','utf8')).$KEY")
             [[ "$ADDRESS" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "Invalid $KEY: $ADDRESS"; exit 1; }
             CODE=$(cast code "$ADDRESS" --rpc-url "$KUB_TESTNET_RPC_URL")
             [ "$CODE" != "0x" ] || { echo "No bytecode at $KEY $ADDRESS"; exit 1; }
           done
+
           POOL=$(node -p "JSON.parse(require('fs').readFileSync('deployment-kub-liquidation-lab.json','utf8')).pool")
           ORACLE=$(node -p "JSON.parse(require('fs').readFileSync('deployment-kub-liquidation-lab.json','utf8')).oracle")
           LAB_KUB=$(node -p "JSON.parse(require('fs').readFileSync('deployment-kub-liquidation-lab.json','utf8')).labKUB")
           LAB_USDC=$(node -p "JSON.parse(require('fs').readFileSync('deployment-kub-liquidation-lab.json','utf8')).labUSDC")
+
           WIRED_ORACLE=$(cast call "$POOL" 'oracle()(address)' --rpc-url "$KUB_TESTNET_RPC_URL")
           [ "${WIRED_ORACLE,,}" = "${ORACLE,,}" ] || { echo "Pool/oracle wiring mismatch"; exit 1; }
-          COUNT=$(cast call "$POOL" 'marketCount()(uint256)' --rpc-url "$KUB_TESTNET_RPC_URL")
-          [ "$COUNT" = "2" ] || { echo "Expected 2 lab markets, got $COUNT"; exit 1; }
+
+          COUNT_RAW=$(cast call "$POOL" 'marketCount()(uint256)' --rpc-url "$KUB_TESTNET_RPC_URL")
+          COUNT=$(parse_cast_uint "$COUNT_RAW")
+          [ "$COUNT" = "2" ] || { echo "Expected 2 lab markets, got $COUNT_RAW"; exit 1; }
+
           PRICE=$(cast call "$ORACLE" 'getPrice(address)((uint256,uint256))' "$LAB_KUB" --rpc-url "$KUB_TESTNET_RPC_URL" | head -n1)
           echo "Normal labKUB oracle response: $PRICE"
-          CASH=$(cast call "$LAB_USDC" 'balanceOf(address)(uint256)' "$POOL" --rpc-url "$KUB_TESTNET_RPC_URL")
-          [ "$CASH" -gt 0 ] || { echo "Lab pool has no seeded labUSDC liquidity"; exit 1; }
+
+          CASH_RAW=$(cast call "$LAB_USDC" 'balanceOf(address)(uint256)' "$POOL" --rpc-url "$KUB_TESTNET_RPC_URL")
+          CASH=$(parse_cast_uint "$CASH_RAW")
+          [ "$CASH" != "0" ] || { echo "Lab pool has no seeded labUSDC liquidity"; exit 1; }
+          echo "Seeded labUSDC liquidity: $CASH base units"
           echo "Liquidation lab wiring validation PASS."
 
       - name: Apply validated lab registry
