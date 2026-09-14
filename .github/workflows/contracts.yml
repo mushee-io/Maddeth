@@ -50,6 +50,7 @@ jobs:
           node --input-type=module --check < src/protocol.js
           node --input-type=module --check < src/site.js
           node --input-type=module --check < src/app-pages.js
+          node --input-type=module --check < src/liquidations.js
           node --check scripts/apply-deployment.mjs
           node --check scripts/check-frontend.mjs
           node --check scripts/export-deployment-env.mjs
