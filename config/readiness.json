@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "network": "KUB Testnet",
+  "chainId": 25925,
+  "releaseStage": "testnet-readiness",
+  "codeEvidence": [
+    { "id": "supply", "label": "Supply", "status": "verified", "evidence": "MaddethPool unit, fuzz and invariant suites" },
+    { "id": "borrow", "label": "Borrow", "status": "verified", "evidence": "MaddethPool unit, fuzz and Phase 4 stress suites" },
+    { "id": "repay", "label": "Repay", "status": "verified", "evidence": "Pool lifecycle and pause-repair coverage" },
+    { "id": "withdraw", "label": "Withdraw", "status": "verified", "evidence": "Pool lifecycle, pause and liquidity coverage" },
+    { "id": "collateral", "label": "Collateral", "status": "verified", "evidence": "LTV, health and collateral toggle coverage" },
+    { "id": "liquidation", "label": "Liquidation", "status": "verified", "evidence": "Two-wallet KUB lab plus deterministic liquidation suite" },
+    { "id": "bad-debt", "label": "Bad debt", "status": "verified", "evidence": "Reserve-first write-off and supplier-loss tests" },
+    { "id": "oracle", "label": "Oracle safety", "status": "verified", "evidence": "Zero, stale, future, bounds and recovery tests" },
+    { "id": "admin", "label": "Admin safety", "status": "verified", "evidence": "Pause-only risk admin and owner-only recovery tests" },
+    { "id": "rwa", "label": "RWA", "status": "verified", "evidence": "Maturity, default, allowlist, cap, issuer and redemption hardening" },
+    { "id": "stress", "label": "Stress suite", "status": "verified", "evidence": "Multi-borrower, multi-liquidator, utilisation, cap and insolvency tests" },
+    { "id": "ci", "label": "CI", "status": "enforced", "evidence": "GitHub Actions build/test must pass before merge" },
+    { "id": "slither", "label": "Static analysis", "status": "enforced", "evidence": "High-severity Slither workflow must pass before merge" }
+  ],
+  "externalGates": [
+    { "id": "audit", "label": "Independent smart-contract audit", "status": "pending", "blockingMainnet": true },
+    { "id": "production-oracles", "label": "Production oracle policy and feeds", "status": "pending", "blockingMainnet": true },
+    { "id": "governance", "label": "Multisig / timelock governance", "status": "pending", "blockingMainnet": true },
+    { "id": "mainnet-assets", "label": "Production asset allowlist and conservative caps", "status": "pending", "blockingMainnet": true },
+    { "id": "legal-rwa", "label": "RWA legal / servicing / recovery framework", "status": "pending", "blockingMainnet": true }
+  ],
+  "policy": {
+    "testnetReadyRequires": ["deployment-live", "three-markets", "oracle-fresh", "code-evidence"],
+    "mainnetReadyRequiresAllExternalGates": true,
+    "neverTreatTestnetEvidenceAsIndependentAudit": true
+  }
+}
