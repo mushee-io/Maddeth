@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: "Type RESUME-KUB-TESTNET to resume the timed-out deployment without redeploying from scratch"
+        description: "Type RESUME-KUB-TESTNET to resume or finalize the timed-out deployment safely"
         required: true
         type: string
 
@@ -61,7 +61,8 @@ jobs:
           cp .resume-source/broadcast/DeployKubTestnet.s.sol/25925/run-*.json broadcast/DeployKubTestnet.s.sol/25925/
           cp .resume-source/deployment-kub-testnet.json deployment-kub-testnet.json
 
-      - name: Verify signer, chain, funding and exact resume nonce
+      - name: Verify signer, chain, funding and deployment state
+        id: preflight
         shell: bash
         run: |
           set -euo pipefail
@@ -79,27 +80,32 @@ jobs:
           fi
 
           BALANCE=$(cast balance "$DEPLOYER" --rpc-url "$KUB_TESTNET_RPC_URL")
-          MIN_RESUME_BALANCE=250000000000000000
-          echo "Resume signer balance: $BALANCE wei"
-          if [ "$BALANCE" -lt "$MIN_RESUME_BALANCE" ]; then
-            echo "Refusing to resume: fund the testnet signer to at least 0.25 tKUB first."
-            exit 1
-          fi
-
           LATEST_NONCE=$(cast nonce "$DEPLOYER" --rpc-url "$KUB_TESTNET_RPC_URL")
           FIRST_MISSING=$(node scripts/first-unresolved-deployment-nonce.mjs \
             broadcast/DeployKubTestnet.s.sol/25925/run-latest.json \
             "$KUB_TESTNET_RPC_URL")
+          echo "Resume signer balance: $BALANCE wei"
           echo "Latest confirmed nonce: $LATEST_NONCE"
-          echo "First unresolved deployment nonce: $FIRST_MISSING"
+
           if [ -z "$FIRST_MISSING" ]; then
-            echo "No unresolved deployment transaction remains; skipping resume is safer."
-            exit 1
-          fi
-          if [ "$LATEST_NONCE" != "$FIRST_MISSING" ]; then
-            echo "Fail closed: account nonce no longer matches the first unresolved deployment nonce."
-            echo "Run Inspect KUB Testnet Deployment again before any write."
-            exit 1
+            echo "All timed-out deployment transactions are already confirmed. Finalizing without redeploying."
+            if [ "$BALANCE" -lt 50000000000000000 ]; then
+              echo "Refusing finalization: keep at least 0.05 tKUB for the smoke test."
+              exit 1
+            fi
+            echo "need_resume=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "First unresolved deployment nonce: $FIRST_MISSING"
+            if [ "$LATEST_NONCE" != "$FIRST_MISSING" ]; then
+              echo "Fail closed: account nonce no longer matches the first unresolved deployment nonce."
+              echo "Run Inspect KUB Testnet Deployment again before any write."
+              exit 1
+            fi
+            if [ "$BALANCE" -lt 250000000000000000 ]; then
+              echo "Refusing to resume: fund the testnet signer to at least 0.25 tKUB first."
+              exit 1
+            fi
+            echo "need_resume=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Resolve KUB legacy gas price
@@ -114,6 +120,7 @@ jobs:
           echo "KUB_LEGACY_GAS_PRICE=$GAS_PRICE_WEI" >> "$GITHUB_ENV"
 
       - name: Resume timed-out deployment journal
+        if: steps.preflight.outputs.need_resume == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -146,7 +153,7 @@ jobs:
               exit 1
             fi
           done
-          echo "All resumed deployment bytecode checks passed."
+          echo "All deployment bytecode checks passed."
 
       - name: End-to-end KUB Testnet lending smoke test
         shell: bash
@@ -179,7 +186,7 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add src/protocol-config.js config/kub-testnet.json
-            git commit -m "Record resumed Maddeth KUB Testnet deployment"
+            git commit -m "Record validated Maddeth KUB Testnet deployment"
             git push origin HEAD:main
           fi
 
