@@ -40,6 +40,22 @@ function ensureLiquidationNav() {
   if (rwa) nav.insertBefore(link, rwa);
   else nav.appendChild(link);
 }
+function ensureLiquidationLabNav() {
+  const nav = document.querySelector('.app-nav');
+  if (!nav || nav.querySelector('[data-app-nav="liquidation-lab"]') || nav.querySelector('a[href="/app/liquidation-lab/"]')) return;
+  const link = document.createElement('a');
+  link.href = '/app/liquidation-lab/';
+  link.dataset.appNav = 'liquidation-lab';
+  link.textContent = 'Lab';
+  const liquidation = nav.querySelector('[data-app-nav="liquidations"]');
+  if (liquidation?.nextSibling) nav.insertBefore(link, liquidation.nextSibling);
+  else if (liquidation) nav.appendChild(link);
+  else {
+    const rwa = nav.querySelector('[data-app-nav="rwa"]');
+    if (rwa) nav.insertBefore(link, rwa);
+    else nav.appendChild(link);
+  }
+}
 function setActiveNav() {
   const page = document.body.dataset.appPage;
   if (!page) return;
@@ -59,6 +75,7 @@ function wireSettings() {
 function init() {
   applyTheme(storageGet('maddeth-theme') || 'system');
   ensureLiquidationNav();
+  ensureLiquidationLabNav();
   wireSettings();
   hardenExternalLinks();
   setActiveNav();

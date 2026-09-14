@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f5f1eb" />
+  <meta name="referrer" content="no-referrer" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' https://rpc-testnet.bitkubchain.io; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; upgrade-insecure-requests" />
+  <meta name="description" content="Isolated Maddeth two-wallet liquidation laboratory on KUB Testnet." />
+  <title>Liquidation Lab — Maddeth</title>
+  <link rel="stylesheet" href="/src/styles.css" />
+  <link rel="stylesheet" href="/src/app-pages.css" />
+  <link rel="stylesheet" href="/src/liquidation-lab.css" />
+</head>
+<body class="app-page" data-app-page="liquidation-lab">
+  <div class="app-announcement">KUB TESTNET · ISOLATED LIQUIDATION LAB · PUBLIC-MINT TEST ASSETS · NO CANONICAL ORACLE CHANGES</div>
+  <header class="app-topbar">
+    <a class="brand" href="/" aria-label="Maddeth home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span>Maddeth</span></a>
+    <nav class="app-nav" aria-label="Application">
+      <a href="/app/">Dashboard</a><a href="/app/markets/">Markets</a><a href="/app/borrow/">Borrow</a><a href="/app/liquidations/">Liquidations</a><a class="active" href="/app/liquidation-lab/">Lab</a><a href="/app/rwa/">RWA</a><a href="/app/portfolio/">Portfolio</a><a href="/app/protocol/">Protocol</a>
+    </nav>
+    <div class="app-actions"><button id="networkPill" class="network-pill" type="button">Not connected</button><button id="connectWallet" class="primary-btn" type="button">Connect wallet</button></div>
+  </header>
+
+  <main class="lab-main">
+    <section class="lab-hero">
+      <div><div class="eyebrow">MADDETH PHASE 2 · TWO-WALLET TEST</div><h1>Liquidation Lab</h1><p>Open a healthy lab position with Wallet A, toggle a bounded $10 → $8 labKUB price shock, then switch to Wallet B and execute the real Maddeth liquidation path on KUB Testnet.</p></div>
+      <div class="lab-state-card"><small>LAB STATUS</small><strong id="labStatus">Loading registry…</strong><span id="labContracts">—</span></div>
+    </section>
+
+    <div id="txBanner" class="tx-banner hidden" aria-live="polite"></div>
+
+    <section class="lab-metrics">
+      <article><small>Connected wallet</small><strong id="connectedWallet">—</strong><span id="gasBalance">— tKUB</span></article>
+      <article><small>labKUB oracle</small><strong id="oraclePrice">—</strong><span id="shockState">—</span></article>
+      <article><small>Borrower</small><strong id="borrowerAddress">Not set</strong><span id="borrowerHealth">Health —</span></article>
+      <article><small>Borrower debt</small><strong id="borrowerDebt">—</strong><span id="borrowerCollateral">Collateral —</span></article>
+    </section>
+
+    <section class="lab-grid">
+      <article class="lab-card">
+        <div class="step">01 · WALLET A</div><h2>Open healthy position</h2><p>The lab uses exactly <b>100 labKUB</b> collateral and <b>700 labUSDC</b> debt. At the normal $10 labKUB price the position starts above the liquidation threshold.</p>
+        <div class="lab-lines"><div><span>Normal collateral value</span><b>$1,000</b></div><div><span>LTV borrow limit</span><b>$750</b></div><div><span>Initial debt</span><b>$700</b></div><div><span>Expected health</span><b>≈ 1.1428</b></div></div>
+        <div class="lab-actions"><button id="mintCollateral" class="secondary-btn" type="button" disabled>Mint 100 labKUB</button><button id="openPosition" class="primary-btn" type="button" disabled>Approve + supply + borrow</button></div>
+      </article>
+
+      <article class="lab-card shock-card">
+        <div class="step">02 · CONTROLLED SHOCK</div><h2>Make Wallet A unhealthy</h2><p>The lab oracle is bounded: it can only toggle labKUB between <b>$10</b> and <b>$8</b>. It cannot price canonical assets and is not connected to the canonical Maddeth pool.</p>
+        <div class="shock-readout"><small>CURRENT LABKUB PRICE</small><strong id="shockPriceLarge">—</strong></div>
+        <div class="lab-actions"><button id="shockPrice" class="primary-btn" type="button" disabled>Shock labKUB to $8</button><button id="resetPrice" class="secondary-btn" type="button" disabled>Reset to $10</button></div>
+        <p class="micro">Expected post-shock health factor for the standard position: ≈ 0.9142.</p>
+      </article>
+
+      <article class="lab-card dark">
+        <div class="step">03 · WALLET B</div><h2>Liquidate Wallet A</h2><p>Switch MetaMask to a different account. Wallet B mints test labUSDC, approves the isolated lab pool and repays up to the protocol's 50% close factor in exchange for seized labKUB plus the configured liquidation bonus.</p>
+        <label for="borrowerInput">Borrower address</label><input id="borrowerInput" autocomplete="off" spellcheck="false" placeholder="Wallet A address" />
+        <div class="lab-lines"><div><span>Max close now</span><b id="maxClose">—</b></div><div><span>Expected seize</span><b id="expectedSeize">—</b></div><div><span>Liquidation bonus</span><b>5.00%</b></div><div><span>Wallet B labUSDC</span><b id="liquidatorUsdc">—</b></div></div>
+        <div class="lab-actions"><button id="mintDebt" class="secondary-btn" type="button" disabled>Mint 10,000 labUSDC</button><button id="liquidate" class="primary-btn" type="button" disabled>Liquidate max close</button></div>
+      </article>
+    </section>
+
+    <section class="lab-proof">
+      <div><div class="eyebrow">LIVE PROOF</div><h2>What counts as PASS</h2></div>
+      <div class="proof-grid"><span>Wallet A health &gt; 1 before shock</span><span>Wallet A health &lt; 1 after shock</span><span>Wallet B cannot equal Wallet A</span><span>Debt falls after liquidation</span><span>Wallet B labKUB rises</span><span>Second close may restore health &gt; 1</span></div>
+    </section>
+
+    <section class="security-note"><strong>ISOLATED TESTNET LAB</strong> · <span id="labFooter">Waiting for deployment registry.</span></section>
+  </main>
+
+  <script type="module" src="/src/site.js"></script>
+  <script type="module" src="/src/liquidation-lab.js"></script>
+</body>
+</html>
