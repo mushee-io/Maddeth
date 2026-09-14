@@ -6,11 +6,12 @@
   <meta name="theme-color" content="#f5f1eb" />
   <meta name="referrer" content="no-referrer" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' https://rpc-testnet.bitkubchain.io; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; upgrade-insecure-requests" />
-  <meta name="description" content="Maddeth Phase 2 liquidation scanner and execution console on KUB Testnet." />
+  <meta name="description" content="Maddeth Phase 2 liquidation scanner, risk engine and isolated two-wallet liquidation lab on KUB Testnet." />
   <title>Liquidations — Maddeth</title>
   <link rel="stylesheet" href="/src/styles.css" />
   <link rel="stylesheet" href="/src/app-pages.css" />
   <link rel="stylesheet" href="/src/liquidations.css" />
+  <link rel="stylesheet" href="/src/liquidation-lab.css" />
 </head>
 <body class="app-page" data-app-page="liquidations">
   <div class="app-announcement">KUB TESTNET · PHASE 2 · LIQUIDATION & RISK ENGINE · TEST ASSETS ONLY</div>
@@ -21,6 +22,7 @@
       <a href="/app/markets/" data-app-nav="markets">Markets</a>
       <a href="/app/borrow/" data-app-nav="borrow">Borrow</a>
       <a href="/app/liquidations/" data-app-nav="liquidations">Liquidations</a>
+      <a href="#liquidation-lab" data-app-nav="liquidation-lab">Lab</a>
       <a href="/app/rwa/" data-app-nav="rwa">RWA</a>
       <a href="/app/portfolio/" data-app-nav="portfolio">Portfolio</a>
       <a href="/app/protocol/" data-app-nav="protocol">Protocol</a>
@@ -117,10 +119,102 @@
       </aside>
     </section>
 
-    <div class="liquidation-footer-note"><strong>Safety boundary:</strong> this console cannot manufacture a liquidation on the canonical pool. Deterministic price-shock testing belongs in the separate Maddeth liquidation lab / Foundry suite so the production-style KUB oracle adapter remains untouched.</div>
+    <div class="liquidation-footer-note"><strong>Safety boundary:</strong> the canonical console above cannot manufacture a liquidation. Use the isolated testnet lab below for deterministic price-shock testing; it has separate contracts and cannot change the canonical Maddeth oracle.</div>
   </main>
+
+  <section class="lab-main" id="liquidation-lab" aria-labelledby="labTitle">
+    <section class="lab-hero">
+      <div>
+        <div class="eyebrow">MADDETH PHASE 2 · ISOLATED TWO-WALLET TEST</div>
+        <h1 id="labTitle">Liquidation Lab</h1>
+        <p>This lab is completely separate from the canonical Maddeth pool. Wallet A opens a healthy lab position, the bounded lab oracle toggles labKUB from $10 to $8, then Wallet B executes the real liquidation path on KUB Testnet.</p>
+      </div>
+      <div class="lab-state-card">
+        <small>LAB STATUS</small>
+        <strong id="labStatus">Loading registry…</strong>
+        <span id="labContracts">—</span>
+        <div class="lab-actions">
+          <button id="labNetworkPill" class="secondary-btn" type="button">Not connected</button>
+          <button id="labConnectWallet" class="primary-btn" type="button">Connect Wallet A/B</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="labTxBanner" class="tx-banner hidden" aria-live="polite"></div>
+
+    <section class="lab-metrics">
+      <article><small>Connected wallet</small><strong id="labConnectedWallet">—</strong><span id="labGasBalance">— tKUB</span></article>
+      <article><small>labKUB oracle</small><strong id="labOraclePrice">—</strong><span id="labShockState">—</span></article>
+      <article><small>Borrower</small><strong id="labBorrowerAddressDisplay">Not set</strong><span id="labBorrowerHealth">Health —</span></article>
+      <article><small>Borrower debt</small><strong id="labBorrowerDebt">—</strong><span id="labBorrowerCollateral">Collateral —</span></article>
+    </section>
+
+    <section class="lab-grid">
+      <article class="lab-card">
+        <div class="step">01 · WALLET A</div>
+        <h2>Open healthy position</h2>
+        <p>The standard test uses <b>100 labKUB</b> collateral and <b>700 labUSDC</b> debt. At $10 labKUB, the position starts above the liquidation threshold.</p>
+        <div class="lab-lines">
+          <div><span>Normal collateral value</span><b>$1,000</b></div>
+          <div><span>LTV borrow limit</span><b>$750</b></div>
+          <div><span>Initial debt</span><b>$700</b></div>
+          <div><span>Expected health</span><b>≈ 1.1428</b></div>
+        </div>
+        <div class="lab-actions">
+          <button id="labMintCollateral" class="secondary-btn" type="button" disabled>Mint 100 labKUB</button>
+          <button id="labOpenPosition" class="primary-btn" type="button" disabled>Approve + supply + borrow</button>
+        </div>
+      </article>
+
+      <article class="lab-card shock-card">
+        <div class="step">02 · CONTROLLED SHOCK</div>
+        <h2>Make Wallet A unhealthy</h2>
+        <p>The bounded test oracle can only toggle labKUB between <b>$10</b> and <b>$8</b>. It cannot price canonical assets and is not connected to the canonical Maddeth pool.</p>
+        <div class="shock-readout"><small>CURRENT LABKUB PRICE</small><strong id="labShockPriceLarge">—</strong></div>
+        <div class="lab-actions">
+          <button id="labShockPrice" class="primary-btn" type="button" disabled>Shock labKUB to $8</button>
+          <button id="labResetPrice" class="secondary-btn" type="button" disabled>Reset to $10</button>
+        </div>
+        <p class="micro">Expected health factor after the standard shock: ≈ 0.9142.</p>
+      </article>
+
+      <article class="lab-card dark">
+        <div class="step">03 · WALLET B</div>
+        <h2>Liquidate Wallet A</h2>
+        <p>Switch MetaMask to a different account. Wallet B mints test labUSDC, approves the isolated lab pool and repays up to the protocol's 50% close factor for seized labKUB plus the 5% liquidation bonus.</p>
+        <label for="labBorrowerInput">Borrower address</label>
+        <input id="labBorrowerInput" autocomplete="off" spellcheck="false" placeholder="Wallet A address" />
+        <button id="labInspectBorrower" class="secondary-btn" type="button">Inspect Wallet A</button>
+        <div class="lab-lines">
+          <div><span>Max close now</span><b id="labMaxClose">—</b></div>
+          <div><span>Expected seize</span><b id="labExpectedSeize">—</b></div>
+          <div><span>Liquidation bonus</span><b>5.00%</b></div>
+          <div><span>Wallet B labUSDC</span><b id="labLiquidatorUsdc">—</b></div>
+        </div>
+        <div class="lab-actions">
+          <button id="labMintDebt" class="secondary-btn" type="button" disabled>Mint 10,000 labUSDC</button>
+          <button id="labLiquidate" class="primary-btn" type="button" disabled>Liquidate max close</button>
+        </div>
+      </article>
+    </section>
+
+    <section class="lab-proof">
+      <div><div class="eyebrow">LIVE PROOF</div><h2>What counts as PASS</h2></div>
+      <div class="proof-grid">
+        <span>Wallet A health &gt; 1 before shock</span>
+        <span>Wallet A health &lt; 1 after shock</span>
+        <span>Wallet B cannot equal Wallet A</span>
+        <span>Debt falls after liquidation</span>
+        <span>Wallet B labKUB rises</span>
+        <span>Second close may restore health &gt; 1</span>
+      </div>
+    </section>
+
+    <section class="security-note"><strong>ISOLATED TESTNET LAB</strong> · <span id="labFooter">Loading deployment registry.</span></section>
+  </section>
 
   <script type="module" src="/src/site.js"></script>
   <script type="module" src="/src/liquidations.js"></script>
+  <script type="module" src="/src/liquidation-lab-inline.js"></script>
 </body>
 </html>
