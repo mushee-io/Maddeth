@@ -21,6 +21,11 @@ jobs:
       KUB_TESTNET_RPC_URL: https://rpc-testnet.bitkubchain.io
       SOURCE_RUN_ID: "34818800131"
       SOURCE_ARTIFACT: kub-testnet-deployment-34818800131
+      DEPLOYER: "0x762Af840189565eae4BE107c74DDe046f811236D"
+      MADDETH_POOL: "0xe381d4d97fA0206D447d1E965F1c1dB96cC5fDc6"
+      WRAPPED_KUB: "0x9f99A8573F7A330eA01E04117e29d98e0164f88E"
+      TEST_USDC: "0x2d6f6A9b93dE56E4169fbc7C5a2F1dE0B55bC1F8"
+      FAILED_REPAY_TX: "0x3197a04c2546ec68543e4c60c307397cefe1058c27c9bac5dc4de859126446f2"
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -50,3 +55,42 @@ jobs:
             .candidate/deployment-kub-testnet.json \
             .candidate/broadcast/DeployKubTestnet.s.sol/25925/run-latest.json \
             "$KUB_TESTNET_RPC_URL"
+
+      - name: Diagnose failed lending smoke transaction
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== failed repay transaction ==="
+          cast tx "$FAILED_REPAY_TX" --rpc-url "$KUB_TESTNET_RPC_URL" || true
+          echo "=== failed repay receipt ==="
+          cast receipt "$FAILED_REPAY_TX" --rpc-url "$KUB_TESTNET_RPC_URL" || true
+
+          echo "=== current account state ==="
+          echo -n "nonce: "
+          cast nonce "$DEPLOYER" --rpc-url "$KUB_TESTNET_RPC_URL"
+          echo -n "mUSDC wallet balance: "
+          cast call "$TEST_USDC" "balanceOf(address)(uint256)" "$DEPLOYER" --rpc-url "$KUB_TESTNET_RPC_URL"
+          echo -n "WtKUB wallet balance: "
+          cast call "$WRAPPED_KUB" "balanceOf(address)(uint256)" "$DEPLOYER" --rpc-url "$KUB_TESTNET_RPC_URL"
+          echo -n "WtKUB supplied: "
+          cast call "$MADDETH_POOL" "supplied(address,address)(uint256)" "$DEPLOYER" "$WRAPPED_KUB" --rpc-url "$KUB_TESTNET_RPC_URL"
+          echo -n "mUSDC borrowed: "
+          cast call "$MADDETH_POOL" "borrowed(address,address)(uint256)" "$DEPLOYER" "$TEST_USDC" --rpc-url "$KUB_TESTNET_RPC_URL"
+          echo -n "collateral enabled: "
+          cast call "$MADDETH_POOL" "collateralEnabled(address,address)(bool)" "$DEPLOYER" "$WRAPPED_KUB" --rpc-url "$KUB_TESTNET_RPC_URL"
+
+          echo "=== simulate exact repay from deployer ==="
+          cast call "$MADDETH_POOL" \
+            "repay(address,uint256)(uint256)" \
+            "$TEST_USDC" \
+            0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff \
+            --from "$DEPLOYER" \
+            --rpc-url "$KUB_TESTNET_RPC_URL" || true
+
+          echo "=== estimate exact repay gas ==="
+          cast estimate "$MADDETH_POOL" \
+            "repay(address,uint256)(uint256)" \
+            "$TEST_USDC" \
+            0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff \
+            --from "$DEPLOYER" \
+            --rpc-url "$KUB_TESTNET_RPC_URL" || true
