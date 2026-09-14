@@ -1,4 +1,14 @@
 {
   "trailingSlash": true,
-  "cleanUrls": false
+  "cleanUrls": false,
+  "rewrites": [
+    {
+      "source": "/app/liquidation-lab",
+      "destination": "/app/liquidation-lab/index.html"
+    },
+    {
+      "source": "/app/liquidation-lab/",
+      "destination": "/app/liquidation-lab/index.html"
+    }
+  ]
 }
