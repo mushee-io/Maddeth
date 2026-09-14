@@ -57,9 +57,11 @@ jobs:
           node --check scripts/apply-deployment.mjs
           node --check scripts/apply-liquidation-lab-deployment.mjs
           node --check scripts/check-frontend.mjs
+          node --check scripts/check-foundry-fs-permissions.mjs
           node --check scripts/export-deployment-env.mjs
           node --check scripts/first-unresolved-deployment-nonce.mjs
           node --check scripts/validate-kub-deployment.mjs
+          node scripts/check-foundry-fs-permissions.mjs
           node scripts/check-frontend.mjs
           git diff --check
 
