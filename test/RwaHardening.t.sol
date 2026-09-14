@@ -190,18 +190,48 @@ contract RwaHardeningTest is TestBase {
     }
 
     function testFactoryRejectsOverlongMaturityAndMetadata() public {
+        uint256 maxMaturity = factory.MAX_VAULT_MATURITY();
+        uint256 maxMetadata = factory.MAX_METADATA_URI_BYTES();
+
         vm.startPrank(issuer);
         vm.expectRevert(bytes("BAD_MATURITY"));
-        factory.createVault(address(usdc), block.timestamp + factory.MAX_VAULT_MATURITY() + 1, 1_000e6, "ipfs://too-long");
+        factory.createVault(address(usdc), block.timestamp + maxMaturity + 1, 1_000e6, "ipfs://too-long");
         vm.stopPrank();
 
-        bytes memory raw = new bytes(factory.MAX_METADATA_URI_BYTES() + 1);
+        bytes memory raw = new bytes(maxMetadata + 1);
         for (uint256 i = 0; i < raw.length; i++) raw[i] = bytes1(uint8(97));
         string memory tooLong = string(raw);
         vm.startPrank(issuer);
         vm.expectRevert(bytes("BAD_METADATA"));
         factory.createVault(address(usdc), block.timestamp + 30 days, 1_000e6, tooLong);
         vm.stopPrank();
+    }
+
+    function testFactoryRejectsEmptyMetadataAndZeroDebtCap() public {
+        vm.startPrank(issuer);
+        vm.expectRevert(bytes("BAD_METADATA"));
+        factory.createVault(address(usdc), block.timestamp + 30 days, 1_000e6, "");
+        vm.expectRevert(bytes("ZERO_DEBT_CAP"));
+        factory.createVault(address(usdc), block.timestamp + 30 days, 0, "ipfs://zero-cap");
+        vm.stopPrank();
+    }
+
+    function testFactoryAcceptsExactMaturityAndMetadataBoundaries() public {
+        uint256 maxMaturity = factory.MAX_VAULT_MATURITY();
+        uint256 maxMetadata = factory.MAX_METADATA_URI_BYTES();
+        bytes memory raw = new bytes(maxMetadata);
+        for (uint256 i = 0; i < raw.length; i++) raw[i] = bytes1(uint8(97));
+
+        vm.prank(issuer);
+        address created = factory.createVault(
+            address(usdc),
+            block.timestamp + maxMaturity,
+            1_000e6,
+            string(raw)
+        );
+
+        assertTrue(factory.isVault(created), "boundary vault not registered");
+        assertEq(factory.vaultIssuer(created), issuer, "boundary vault issuer mismatch");
     }
 
     function testFactoryRegistryTracksEveryCreatedVault() public {
