@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f5f1eb" />
+  <meta name="referrer" content="no-referrer" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' https://rpc-testnet.bitkubchain.io; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; upgrade-insecure-requests" />
+  <meta name="description" content="Maddeth Phase 2 liquidation scanner and execution console on KUB Testnet." />
+  <title>Liquidations — Maddeth</title>
+  <link rel="stylesheet" href="/src/styles.css" />
+  <link rel="stylesheet" href="/src/app-pages.css" />
+  <link rel="stylesheet" href="/src/liquidations.css" />
+</head>
+<body class="app-page" data-app-page="liquidations">
+  <div class="app-announcement">KUB TESTNET · PHASE 2 · LIQUIDATION & RISK ENGINE · TEST ASSETS ONLY</div>
+  <header class="app-topbar">
+    <a class="brand" href="/" aria-label="Maddeth home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span>Maddeth</span></a>
+    <nav class="app-nav" aria-label="Application">
+      <a href="/app/" data-app-nav="dashboard">Dashboard</a>
+      <a href="/app/markets/" data-app-nav="markets">Markets</a>
+      <a href="/app/borrow/" data-app-nav="borrow">Borrow</a>
+      <a href="/app/liquidations/" data-app-nav="liquidations">Liquidations</a>
+      <a href="/app/rwa/" data-app-nav="rwa">RWA</a>
+      <a href="/app/portfolio/" data-app-nav="portfolio">Portfolio</a>
+      <a href="/app/protocol/" data-app-nav="protocol">Protocol</a>
+      <a href="/docs/" data-app-nav="docs">Docs</a>
+    </nav>
+    <div class="app-actions"><button id="networkPill" class="network-pill" type="button">Not connected</button><button id="connectWallet" class="primary-btn" type="button">Connect liquidator</button></div>
+  </header>
+
+  <main class="liquidation-main">
+    <section class="liquidation-hero">
+      <div>
+        <div class="eyebrow">MADDETH PHASE 2 · RISK ENGINE</div>
+        <h1>Liquidations</h1>
+        <p>Scan canonical KUB Testnet borrow events, inspect current account health, preview the exact close-factor and collateral seizure path, then execute a real liquidation from a second wallet.</p>
+      </div>
+      <div class="liquidation-badges">
+        <span class="liquidation-badge">50% close factor</span>
+        <span class="liquidation-badge">Fail-closed gas estimate</span>
+        <span class="liquidation-badge danger">Audit pending</span>
+      </div>
+    </section>
+
+    <div id="txBanner" class="tx-banner hidden" aria-live="polite"></div>
+
+    <section class="liquidation-grid">
+      <div>
+        <article class="liquidation-card">
+          <div class="eyebrow">01 · FIND RISK</div>
+          <h2>Borrower scanner</h2>
+          <p>The scanner reads <strong>Borrowed</strong> events from the recorded deployment block, deduplicates borrowers, then checks each account against the live Maddeth Lens and current KUB oracle values.</p>
+          <div class="liquidation-toolbar">
+            <button id="scanButton" class="primary-btn" type="button">Scan borrowers</button>
+            <div class="status-copy"><span id="scanProgress">Ready</span> · from block <span id="scanFromBlock">—</span></div>
+          </div>
+          <div class="liquidation-table">
+            <div class="liquidation-head"><span>Borrower</span><span>Health</span><span>Debt</span><span>Status</span><span></span></div>
+            <div id="candidateRows"><div class="liquidation-row empty-row">Run the scanner to discover active borrower positions.</div></div>
+          </div>
+          <div class="lab-note"><strong>Canonical pool only.</strong>This scanner never changes oracle prices or risk parameters. It will only identify accounts that are already liquidatable under the live KUB Testnet state.</div>
+        </article>
+
+        <article class="liquidation-card">
+          <div class="eyebrow">02 · INSPECT</div>
+          <h2>Borrower position</h2>
+          <p>Paste any KUB Testnet borrower address or choose one from the scanner. Healthy accounts remain blocked from liquidation.</p>
+          <div class="borrower-search">
+            <input id="borrowerAddress" autocomplete="off" spellcheck="false" placeholder="0x borrower address" />
+            <button id="inspectButton" class="secondary-btn" type="button">Inspect account</button>
+          </div>
+          <div class="borrower-summary">
+            <div class="summary-cell"><small>Health factor</small><strong id="borrowerHealth">—</strong></div>
+            <div class="summary-cell"><small>Debt</small><strong id="borrowerDebt">—</strong></div>
+            <div class="summary-cell"><small>Collateral</small><strong id="borrowerCollateral">—</strong></div>
+            <div class="summary-cell"><small>Status</small><strong id="borrowerStatus">Not inspected</strong></div>
+          </div>
+
+          <div class="liquidation-form">
+            <label>Debt asset<select id="debtAsset"><option value="">Inspect a borrower first</option></select></label>
+            <label>Collateral asset<select id="collateralAsset"><option value="">Inspect a borrower first</option></select></label>
+            <div class="inline-action">
+              <label>Requested repay<input id="repayAmount" inputmode="decimal" placeholder="0.00" /></label>
+              <button id="useMaxClose" class="secondary-btn" type="button">Use max close</button>
+            </div>
+            <small>Protocol max close for selected debt: <strong id="maxCloseHint">—</strong></small>
+            <button id="previewLiquidation" class="primary-btn" type="button">Preview liquidation</button>
+          </div>
+        </article>
+      </div>
+
+      <aside>
+        <article class="liquidation-card dark">
+          <div class="eyebrow">03 · EXECUTE</div>
+          <h2>Liquidator console</h2>
+          <p>Use a second wallet. Maddeth first approves the exact debt token amount, then submits the pool liquidation transaction.</p>
+          <div class="liquidator-meta">
+            <div class="liquidator-line"><span>Wallet</span><b id="liquidatorAddress">Not connected</b></div>
+            <div class="liquidator-line"><span>Gas balance</span><b id="liquidatorTKUB">—</b></div>
+            <div class="liquidator-line"><span>Pool</span><b id="poolAddress">—</b></div>
+          </div>
+          <div class="preview-grid">
+            <div class="preview-cell"><small>Actual repay</small><strong id="previewRepay">—</strong></div>
+            <div class="preview-cell"><small>Expected seize</small><strong id="previewSeize">—</strong></div>
+            <div class="preview-cell"><small>Liquidation bonus</small><strong id="previewBonus">—</strong></div>
+            <div class="preview-cell"><small>Close cap</small><strong id="previewCap">—</strong></div>
+            <div class="preview-cell"><small>Limiting condition</small><strong id="previewMode">—</strong></div>
+            <div class="preview-cell"><small>Markets</small><strong id="candidateRowsStatus">—</strong></div>
+          </div>
+          <div class="action-stack">
+            <button id="mintDebtAsset" class="secondary-btn" type="button">Mint 10,000 selected test stable</button>
+            <button id="executeLiquidation" class="primary-btn" type="button" disabled>Execute liquidation</button>
+          </div>
+          <div class="lab-note"><strong>Two-wallet rule.</strong>The UI refuses to liquidate from the borrower wallet. Wallet A should hold the unhealthy position; Wallet B should execute liquidation.</div>
+        </article>
+      </aside>
+    </section>
+
+    <div class="liquidation-footer-note"><strong>Safety boundary:</strong> this console cannot manufacture a liquidation on the canonical pool. Deterministic price-shock testing belongs in the separate Maddeth liquidation lab / Foundry suite so the production-style KUB oracle adapter remains untouched.</div>
+  </main>
+
+  <script type="module" src="/src/site.js"></script>
+  <script type="module" src="/src/liquidations.js"></script>
+</body>
+</html>
