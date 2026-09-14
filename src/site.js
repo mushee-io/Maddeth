@@ -42,9 +42,9 @@ function ensureLiquidationNav() {
 }
 function ensureLiquidationLabNav() {
   const nav = document.querySelector('.app-nav');
-  if (!nav || nav.querySelector('[data-app-nav="liquidation-lab"]') || nav.querySelector('a[href="/app/liquidation-lab/"]')) return;
+  if (!nav || nav.querySelector('[data-app-nav="liquidation-lab"]')) return;
   const link = document.createElement('a');
-  link.href = '/app/liquidation-lab/';
+  link.href = '/app/liquidations/#liquidation-lab';
   link.dataset.appNav = 'liquidation-lab';
   link.textContent = 'Lab';
   const liquidation = nav.querySelector('[data-app-nav="liquidations"]');
