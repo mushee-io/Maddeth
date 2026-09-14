@@ -46,7 +46,9 @@ const requiredRoutes = {
   ],
   'app/rwa/index.html': ['rwaStatus','rwaCap','rwaDeposits','rwaDebt','rwaMaturity','rwaAccess','rwaDepositButton','rwaWithdrawButton'],
   'app/portfolio/index.html': ['portfolioDisconnected','portfolioLive','portfolioTitle','portfolioConnect','portfolioRows','portfolioHealth'],
-  'app/protocol/index.html': ['deploymentLabel','contractStatus']
+  'app/protocol/index.html': [
+    'deploymentLabel','contractStatus','riskConsoleTitle','riskActionBanner','riskConnectedWallet','riskRole','riskNetwork','riskOwner','riskPendingOwner','riskAdminAddress','riskOracle','riskProtocolPause','riskMarketCount','riskAlertCount','riskEmergencyStatus','riskMarketsBody','riskMarketSelect','riskConnect','riskNetworkButton','riskRefresh','riskPauseProtocol','riskUnpauseProtocol','riskPauseMarket','riskUnpauseMarket'
+  ]
 };
 for (const [file, required] of Object.entries(requiredRoutes)) {
   const html = readFileSync(file,'utf8');
@@ -79,4 +81,11 @@ if (!/eth_estimateGas/.test(labInlineJs)) throw new Error('Embedded lab must fai
 if (!/account\.toLowerCase\(\) === borrower\.toLowerCase\(\)/.test(labInlineJs)) throw new Error('Embedded lab two-wallet guard missing');
 const siteJs = readFileSync('src/site.js','utf8');
 if (!/\/app\/liquidations\/#liquidation-lab/.test(siteJs)) throw new Error('Lab navigation must remain inside the Liquidations page');
-console.log(`Frontend integrity PASS · ${pages.length} routes · multipage Maddeth application enforced`);
+const riskJs = readFileSync('src/risk-admin.js','utf8');
+if (!/setProtocolPaused\(bool\)/.test(riskJs)) throw new Error('Risk console protocol pause path missing');
+if (!/setPaused\(address,bool\)/.test(riskJs)) throw new Error('Risk console market pause path missing');
+if (!/MAX_ORACLE_AGE\(\)/.test(riskJs)) throw new Error('Risk console oracle freshness boundary missing');
+if (!/marketTotals\(address\)/.test(riskJs) || !/markets\(address\)/.test(riskJs)) throw new Error('Risk console live market telemetry missing');
+if (!/eth_estimateGas/.test(riskJs)) throw new Error('Risk console actions must fail closed through gas estimation');
+if (/configureMarket\(address/.test(riskJs) || /withdrawReserves\(/.test(riskJs) || /absorbBadDebt\(/.test(riskJs) || /setOracle\(/.test(riskJs)) throw new Error('Risk browser console exposes destructive owner configuration');
+console.log(`Frontend integrity PASS · ${pages.length} routes · Phase 3 risk console enforced`);
