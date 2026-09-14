@@ -38,7 +38,7 @@ contract SmokeKubTestnet {
         WrappedTKUB wrapped = WrappedTKUB(payable(wrappedAddress));
         MockERC20 usdc = MockERC20(usdcAddress);
 
-        uint256 nativeBefore = account.balance;
+        uint256 wrappedBefore = wrapped.balanceOf(account);
         uint256 suppliedBefore = pool.supplied(account, wrappedAddress);
         uint256 debtBefore = pool.borrowed(account, usdcAddress);
         require(debtBefore == 0, "SMOKE_REQUIRES_ZERO_USDC_DEBT");
@@ -64,7 +64,12 @@ contract SmokeKubTestnet {
 
         VM.stopBroadcast();
 
-        require(wrapped.balanceOf(account) == 0, "WRAPPED_BALANCE_REMAINS");
-        require(account.balance < nativeBefore, "GAS_NOT_ACCOUNTED");
+        // Foundry simulates a script before broadcasting it. Simulation does not debit
+        // transaction gas from `account.balance`, so a native-balance gas assertion is
+        // not a valid smoke-test invariant and can make an otherwise successful lifecycle
+        // revert before any transactions are broadcast. Validate protocol state instead.
+        require(wrapped.balanceOf(account) == wrappedBefore, "WRAPPED_BALANCE_NOT_RESTORED");
+        require(pool.supplied(account, wrappedAddress) == suppliedBefore, "SUPPLY_NOT_RESTORED");
+        require(pool.borrowed(account, usdcAddress) == debtBefore, "DEBT_NOT_RESTORED");
     }
 }
