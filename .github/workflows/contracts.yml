@@ -73,11 +73,11 @@ jobs:
           node --check scripts/export-deployment-env.mjs
           node --check scripts/first-unresolved-deployment-nonce.mjs
           node --check scripts/validate-kub-deployment.mjs
-          node --check scripts/check-final-readiness.mjs
-          node --check scripts/check-kub-health.mjs
+          node --check scripts/check-release-readiness.mjs
+          node --check scripts/kub-health-check.mjs
           node scripts/check-foundry-fs-permissions.mjs
           node scripts/check-frontend.mjs
-          node scripts/check-final-readiness.mjs
+          node scripts/check-release-readiness.mjs
           git diff --check
 
       - name: Install Foundry
