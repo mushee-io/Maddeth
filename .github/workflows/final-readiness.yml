@@ -9,12 +9,25 @@ on:
         default: false
         type: boolean
 
+permissions:
+  contents: read
+
+concurrency:
+  group: final-testnet-readiness-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   final-readiness:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -23,12 +36,14 @@ jobs:
 
       - name: Repository readiness guards
         run: |
+          set -euo pipefail
           node --check scripts/check-frontend.mjs
           node --check scripts/check-release-readiness.mjs
           node --check scripts/kub-health-check.mjs
           node --input-type=module --check < src/readiness.js
           node scripts/check-frontend.mjs
           node scripts/check-release-readiness.mjs
+          git diff --check
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
@@ -36,24 +51,39 @@ jobs:
           version: stable
 
       - name: Full contract build
-        run: forge build
+        run: |
+          set -euo pipefail
+          forge build
 
       - name: Full unit fuzz invariant and stress suite
-        run: forge test -vvv
+        run: |
+          set -euo pipefail
+          forge test -vvv
 
       - name: Canonical KUB health check
-        run: node scripts/kub-health-check.mjs
+        run: |
+          set -euo pipefail
+          node scripts/kub-health-check.mjs | tee kub-health-report.json
+
+      - name: Upload canonical health evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kub-health-${{ github.run_id }}
+          path: kub-health-report.json
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Verify production frontend routes
         if: ${{ inputs.check_production_ui }}
-        shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --retry 3 https://maddeth.vercel.app/app/ > /tmp/dashboard.html
-          curl --fail --silent --show-error --retry 3 https://maddeth.vercel.app/app/liquidations/ > /tmp/liquidations.html
-          curl --fail --silent --show-error --retry 3 https://maddeth.vercel.app/app/protocol/ > /tmp/protocol.html
-          curl --fail --silent --show-error --retry 3 https://maddeth.vercel.app/app/readiness/ > /tmp/readiness.html
-          grep -q "Liquidation Lab" /tmp/liquidations.html
-          grep -q "Risk & resilience console" /tmp/protocol.html
-          grep -q "FINAL TESTNET READINESS" /tmp/readiness.html
+          curl --fail --silent --show-error --location --retry 3 --retry-all-errors --connect-timeout 10 --max-time 30 https://maddeth.vercel.app/app/ > /tmp/dashboard.html
+          curl --fail --silent --show-error --location --retry 3 --retry-all-errors --connect-timeout 10 --max-time 30 https://maddeth.vercel.app/app/liquidations/ > /tmp/liquidations.html
+          curl --fail --silent --show-error --location --retry 3 --retry-all-errors --connect-timeout 10 --max-time 30 https://maddeth.vercel.app/app/protocol/ > /tmp/protocol.html
+          curl --fail --silent --show-error --location --retry 3 --retry-all-errors --connect-timeout 10 --max-time 30 https://maddeth.vercel.app/app/readiness/ > /tmp/readiness.html
+          grep -Fq "Liquidation Lab" /tmp/liquidations.html
+          grep -Fq "Risk & resilience console" /tmp/protocol.html
+          grep -Fq "FINAL TESTNET READINESS" /tmp/readiness.html
+          grep -Fq "MADDETH" /tmp/dashboard.html
           echo "Production UI route smoke PASS"
