@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <meta name="theme-color" content="#f5f1eb" />
+  <meta name="referrer" content="no-referrer" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self';script-src 'self';style-src 'self';connect-src 'self' https://rpc-testnet.bitkubchain.io;img-src 'self' data:;object-src 'none';base-uri 'none';form-action 'self';upgrade-insecure-requests" />
+  <meta name="description" content="Maddeth KUB Testnet readiness dashboard and external launch gates." />
+  <title>Readiness — Maddeth</title>
+  <link rel="stylesheet" href="/src/styles.css" />
+  <link rel="stylesheet" href="/src/app-pages.css" />
+  <link rel="stylesheet" href="/src/readiness.css" />
+</head>
+<body class="app-page" data-app-page="readiness">
+  <div class="app-announcement">KUB TESTNET · FINAL READINESS · EXTERNAL AUDIT STILL REQUIRED BEFORE PRODUCTION</div>
+  <header class="app-topbar">
+    <a class="brand" href="/"><span class="brand-mark"><i></i><i></i><i></i></span><span>Maddeth</span></a>
+    <nav class="app-nav" aria-label="Application">
+      <a href="/app/" data-app-nav="dashboard">Dashboard</a>
+      <a href="/app/markets/" data-app-nav="markets">Markets</a>
+      <a href="/app/borrow/" data-app-nav="borrow">Borrow</a>
+      <a href="/app/liquidations/" data-app-nav="liquidations">Liquidations</a>
+      <a href="/app/rwa/" data-app-nav="rwa">RWA</a>
+      <a href="/app/portfolio/" data-app-nav="portfolio">Portfolio</a>
+      <a href="/app/protocol/" data-app-nav="protocol">Protocol</a>
+      <a href="/app/readiness/" data-app-nav="readiness">Readiness</a>
+      <a href="/docs/" data-app-nav="docs">Docs</a>
+    </nav>
+    <div class="app-actions"><button id="readinessRefreshTop" class="primary-btn" type="button">Refresh checks</button></div>
+  </header>
+
+  <main class="readiness-main">
+    <section class="readiness-hero">
+      <div>
+        <div class="eyebrow">MADDETH FINAL TESTNET READINESS</div>
+        <h1>Evidence,<br/>not vibes.</h1>
+        <p>One surface for live KUB deployment checks, protocol risk telemetry, test coverage and the external gates that still block production use.</p>
+      </div>
+      <aside class="readiness-verdict">
+        <small>CURRENT VERDICT</small>
+        <strong id="readinessVerdict">CHECKING…</strong>
+        <span id="readinessVerdictDetail">Reading KUB Testnet and readiness policy.</span>
+      </aside>
+    </section>
+
+    <div id="readinessBanner" class="tx-banner hidden" aria-live="polite"></div>
+
+    <section class="readiness-live-grid">
+      <article><small>Deployment</small><strong id="readyDeployment">—</strong><span id="readyDeploymentDetail">Checking registry</span></article>
+      <article><small>Canonical markets</small><strong id="readyMarkets">—</strong><span>Expected: 3</span></article>
+      <article><small>Oracle freshness</small><strong id="readyOracle">—</strong><span id="readyOracleDetail">Checking all markets</span></article>
+      <article><small>Protocol posture</small><strong id="readyProtocol">—</strong><span id="readyProtocolDetail">Checking live risk state</span></article>
+      <article><small>RWA sample</small><strong id="readyRwa">—</strong><span id="readyRwaDetail">Checking isolated vault</span></article>
+      <article><small>Latest KUB block</small><strong id="readyBlock">—</strong><span>Live RPC heartbeat</span></article>
+    </section>
+
+    <section class="readiness-section">
+      <div class="section-copy"><div class="eyebrow">CODE & TEST EVIDENCE</div><h2>What the repository proves</h2><p>These checks are enforced through deterministic unit, fuzz, invariant, stress and security-analysis workflows. They are not a substitute for an independent audit.</p></div>
+      <div id="readinessEvidence" class="readiness-evidence"><div class="readiness-empty">Loading evidence…</div></div>
+    </section>
+
+    <section class="readiness-section split">
+      <div>
+        <div class="eyebrow">LIVE MARKET SNAPSHOT</div>
+        <h2>Canonical KUB risk</h2>
+        <div id="readinessMarkets" class="readiness-market-list"><div class="readiness-empty">Loading markets…</div></div>
+      </div>
+      <div>
+        <div class="eyebrow">EXTERNAL GATES</div>
+        <h2>Still required</h2>
+        <div id="readinessExternal" class="readiness-external"><div class="readiness-empty">Loading gates…</div></div>
+      </div>
+    </section>
+
+    <section class="readiness-actions">
+      <div><div class="eyebrow">OPERATIONS</div><h2>Release discipline</h2><p>Before any production use, complete the external gates, transfer control away from a personal deployer wallet, approve conservative production caps, and run the documented incident/recovery checklist.</p></div>
+      <div class="readiness-action-links">
+        <a class="primary-btn" href="/docs/">Open docs ↗</a>
+        <a class="secondary-btn" href="/app/protocol/#risk-admin">Risk console ↗</a>
+        <a class="secondary-btn" href="/app/liquidations/#liquidation-lab">Liquidation lab ↗</a>
+      </div>
+    </section>
+
+    <section class="readiness-boundary"><strong>Boundary:</strong> “TESTNET READY” means the current KUB Testnet deployment and automated evidence satisfy Maddeth's internal testnet policy. It does <b>not</b> mean audited, regulated, insured or suitable for production funds.</section>
+  </main>
+
+  <script type="module" src="/src/site.js"></script>
+  <script type="module" src="/src/readiness.js"></script>
+</body>
+</html>
