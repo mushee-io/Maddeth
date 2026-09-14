@@ -15,7 +15,7 @@ interface VmSmoke {
 
 /// @title SmokeKubTestnet
 /// @notice Executes the minimum real Maddeth lifecycle after a KUB Testnet deployment.
-/// @dev Uses deliberately tiny amounts. A passing run proves wrap -> supply -> collateral -> borrow -> repay -> withdraw -> unwrap.
+/// @dev Resumable after a partially mined previous smoke run. Uses deliberately tiny amounts.
 contract SmokeKubTestnet {
     VmSmoke internal constant VM = VmSmoke(address(uint160(uint256(keccak256("hevm cheat code")))));
 
@@ -38,13 +38,33 @@ contract SmokeKubTestnet {
         WrappedTKUB wrapped = WrappedTKUB(payable(wrappedAddress));
         MockERC20 usdc = MockERC20(usdcAddress);
 
-        uint256 wrappedBefore = wrapped.balanceOf(account);
-        uint256 suppliedBefore = pool.supplied(account, wrappedAddress);
-        uint256 debtBefore = pool.borrowed(account, usdcAddress);
-        require(debtBefore == 0, "SMOKE_REQUIRES_ZERO_USDC_DEBT");
-
         VM.startBroadcast(privateKey);
 
+        // Recover safely from a previous smoke run that mined only part of the lifecycle.
+        uint256 staleDebt = pool.borrowed(account, usdcAddress);
+        if (staleDebt > 0) {
+            require(usdc.balanceOf(account) >= staleDebt, "RECOVERY_USDC_MISSING");
+            usdc.approve(poolAddress, type(uint256).max);
+            pool.repay(usdcAddress, type(uint256).max);
+        }
+
+        if (pool.collateralEnabled(account, wrappedAddress)) {
+            pool.setCollateral(wrappedAddress, false);
+        }
+
+        uint256 staleSupply = pool.supplied(account, wrappedAddress);
+        if (staleSupply > 0) {
+            pool.withdraw(wrappedAddress, staleSupply);
+            wrapped.withdraw(staleSupply);
+        }
+
+        require(pool.borrowed(account, usdcAddress) == 0, "RECOVERY_DEBT_REMAINS");
+        require(pool.supplied(account, wrappedAddress) == 0, "RECOVERY_SUPPLY_REMAINS");
+        require(!pool.collateralEnabled(account, wrappedAddress), "RECOVERY_COLLATERAL_REMAINS");
+
+        uint256 wrappedBaseline = wrapped.balanceOf(account);
+
+        // Fresh end-to-end lifecycle.
         wrapped.deposit{value: WRAP_AMOUNT}();
         wrapped.approve(poolAddress, WRAP_AMOUNT);
         pool.supply(wrappedAddress, WRAP_AMOUNT);
@@ -57,19 +77,17 @@ contract SmokeKubTestnet {
         pool.repay(usdcAddress, type(uint256).max);
         require(pool.borrowed(account, usdcAddress) == 0, "REPAY_NOT_CLEARED");
 
+        pool.setCollateral(wrappedAddress, false);
         pool.withdraw(wrappedAddress, WRAP_AMOUNT);
-        require(pool.supplied(account, wrappedAddress) == suppliedBefore, "WITHDRAW_NOT_CLEARED");
+        require(pool.supplied(account, wrappedAddress) == 0, "WITHDRAW_NOT_CLEARED");
 
         wrapped.withdraw(WRAP_AMOUNT);
 
         VM.stopBroadcast();
 
-        // Foundry simulates a script before broadcasting it. Simulation does not debit
-        // transaction gas from `account.balance`, so a native-balance gas assertion is
-        // not a valid smoke-test invariant and can make an otherwise successful lifecycle
-        // revert before any transactions are broadcast. Validate protocol state instead.
-        require(wrapped.balanceOf(account) == wrappedBefore, "WRAPPED_BALANCE_NOT_RESTORED");
-        require(pool.supplied(account, wrappedAddress) == suppliedBefore, "SUPPLY_NOT_RESTORED");
-        require(pool.borrowed(account, usdcAddress) == debtBefore, "DEBT_NOT_RESTORED");
+        require(wrapped.balanceOf(account) == wrappedBaseline, "WRAPPED_BALANCE_MISMATCH");
+        require(pool.borrowed(account, usdcAddress) == 0, "FINAL_DEBT_REMAINS");
+        require(pool.supplied(account, wrappedAddress) == 0, "FINAL_SUPPLY_REMAINS");
+        require(!pool.collateralEnabled(account, wrappedAddress), "FINAL_COLLATERAL_REMAINS");
     }
 }
