@@ -61,7 +61,7 @@ jobs:
           cp .resume-source/broadcast/DeployKubTestnet.s.sol/25925/run-*.json broadcast/DeployKubTestnet.s.sol/25925/
           cp .resume-source/deployment-kub-testnet.json deployment-kub-testnet.json
 
-      - name: Verify signer, chain and exact resume nonce
+      - name: Verify signer, chain, funding and exact resume nonce
         shell: bash
         run: |
           set -euo pipefail
@@ -75,6 +75,14 @@ jobs:
           EXPECTED_DEPLOYER=$(node -p "JSON.parse(require('fs').readFileSync('deployment-kub-testnet.json','utf8')).deployer")
           if [ "${DEPLOYER,,}" != "${EXPECTED_DEPLOYER,,}" ]; then
             echo "Signer does not match original deployment owner."
+            exit 1
+          fi
+
+          BALANCE=$(cast balance "$DEPLOYER" --rpc-url "$KUB_TESTNET_RPC_URL")
+          MIN_RESUME_BALANCE=250000000000000000
+          echo "Resume signer balance: $BALANCE wei"
+          if [ "$BALANCE" -lt "$MIN_RESUME_BALANCE" ]; then
+            echo "Refusing to resume: fund the testnet signer to at least 0.25 tKUB first."
             exit 1
           fi
 
