@@ -81,6 +81,7 @@ jobs:
           node --check scripts/check-frontend.mjs
           node scripts/check-frontend.mjs
           git diff --check
+          forge clean
           forge build
           forge test -vvv
 
@@ -90,6 +91,7 @@ jobs:
           forge script script/DeployKubTestnet.s.sol:DeployKubTestnet \
             --rpc-url "$KUB_TESTNET_RPC_URL" \
             --broadcast \
+            --legacy \
             -vvvv
 
       - name: Load deployed contracts for validation
@@ -129,6 +131,7 @@ jobs:
           forge script script/SmokeKubTestnet.s.sol:SmokeKubTestnet \
             --rpc-url "$KUB_TESTNET_RPC_URL" \
             --broadcast \
+            --legacy \
             -vvvv
 
       - name: Apply canonical deployment addresses after successful smoke test
