@@ -87,19 +87,9 @@ jobs:
           fi
 
           LATEST_NONCE=$(cast nonce "$DEPLOYER" --rpc-url "$KUB_TESTNET_RPC_URL")
-          FIRST_MISSING=$(python3 - <<'PY'
-import json, subprocess
-p='broadcast/DeployKubTestnet.s.sol/25925/run-latest.json'
-d=json.load(open(p))
-for tx in sorted(d['transactions'], key=lambda x: int(x['transaction']['nonce'],16)):
-    h=tx.get('hash')
-    if not h:
-        print(int(tx['transaction']['nonce'],16)); break
-    out=subprocess.run(['cast','rpc','--rpc-url','https://rpc-testnet.bitkubchain.io','eth_getTransactionReceipt',h],capture_output=True,text=True).stdout.strip()
-    if out == 'null' or out == '':
-        print(int(tx['transaction']['nonce'],16)); break
-PY
-          )
+          FIRST_MISSING=$(node scripts/first-unresolved-deployment-nonce.mjs \
+            broadcast/DeployKubTestnet.s.sol/25925/run-latest.json \
+            "$KUB_TESTNET_RPC_URL")
           echo "Latest confirmed nonce: $LATEST_NONCE"
           echo "First unresolved deployment nonce: $FIRST_MISSING"
           if [ -z "$FIRST_MISSING" ]; then
