@@ -14,15 +14,15 @@ export const MADDETH_DEPLOYMENT = Object.freeze({
   network: 'KUB Testnet',
   chainId: 25925,
   contracts: Object.freeze({
-    maddethPool: null,
-    maddethLens: null,
-    oracle: null,
-    interestRateModel: null,
-    rwaVaultFactory: null,
-    sampleRwaVault: null,
-    wrappedKUB: null,
-    testUSDT: null,
-    testUSDC: null
+    maddethPool: '0xe381d4d97fA0206D447d1E965F1c1dB96cC5fDc6',
+    maddethLens: '0x55F4a27C67916A47E8421576c07cB2Ffe7B7022d',
+    oracle: '0x4D468eb9b0b7AD964a87Cb79E5D329D9a22a9D36',
+    interestRateModel: '0x127f127281f8Be23D9789a44fFFC7a2A980BE6d6',
+    rwaVaultFactory: '0x76Dd7E8A3f77f7cD2C3d84C025cBBD01670991A4',
+    sampleRwaVault: '0x0958Cc85232D8393B92D1463D2DFeB4FEFb8B801',
+    wrappedKUB: '0x9f99A8573F7A330eA01E04117e29d98e0164f88E',
+    testUSDT: '0x5609661078c717b996Ab0185d5a555925Da27bE5',
+    testUSDC: '0x2d6f6A9b93dE56E4169fbc7C5a2F1dE0B55bC1F8'
   }),
   oracleFeeds: Object.freeze({
     kubUsdt: '0x6Cc1316A9695E435875A5CDA6e60066114f8A395',
