@@ -17,6 +17,7 @@ on:
       - "foundry.toml"
       - ".github/workflows/contracts.yml"
       - ".github/workflows/deploy-kub-testnet.yml"
+      - ".github/workflows/deploy-liquidation-lab.yml"
       - ".github/workflows/resume-kub-testnet.yml"
       - ".github/workflows/inspect-kub-testnet.yml"
   pull_request:
@@ -34,6 +35,7 @@ on:
       - "foundry.toml"
       - ".github/workflows/contracts.yml"
       - ".github/workflows/deploy-kub-testnet.yml"
+      - ".github/workflows/deploy-liquidation-lab.yml"
       - ".github/workflows/resume-kub-testnet.yml"
       - ".github/workflows/inspect-kub-testnet.yml"
 
@@ -51,7 +53,9 @@ jobs:
           node --input-type=module --check < src/site.js
           node --input-type=module --check < src/app-pages.js
           node --input-type=module --check < src/liquidations.js
+          node --input-type=module --check < src/liquidation-lab.js
           node --check scripts/apply-deployment.mjs
+          node --check scripts/apply-liquidation-lab-deployment.mjs
           node --check scripts/check-frontend.mjs
           node --check scripts/export-deployment-env.mjs
           node --check scripts/first-unresolved-deployment-nonce.mjs
