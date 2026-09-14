@@ -56,6 +56,17 @@ function ensureLiquidationLabNav() {
     else nav.appendChild(link);
   }
 }
+function ensureReadinessNav() {
+  const nav = document.querySelector('.app-nav');
+  if (!nav || nav.querySelector('[data-app-nav="readiness"]')) return;
+  const link = document.createElement('a');
+  link.href = '/app/readiness/';
+  link.dataset.appNav = 'readiness';
+  link.textContent = 'Readiness';
+  const docs = nav.querySelector('[data-app-nav="docs"]');
+  if (docs) nav.insertBefore(link, docs);
+  else nav.appendChild(link);
+}
 function setActiveNav() {
   const page = document.body.dataset.appPage;
   if (!page) return;
@@ -76,6 +87,7 @@ function init() {
   applyTheme(storageGet('maddeth-theme') || 'system');
   ensureLiquidationNav();
   ensureLiquidationLabNav();
+  ensureReadinessNav();
   wireSettings();
   hardenExternalLinks();
   setActiveNav();
